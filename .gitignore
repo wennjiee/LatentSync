@@ -39,6 +39,8 @@ wandb/
 *.jpg
 *.jpeg
 *.csv
+*.zip
+*.whl
 
 !/latentsync/utils/mask.png
 /checkpoints/
