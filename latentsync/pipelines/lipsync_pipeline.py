@@ -31,7 +31,7 @@ import cv2
 
 from ..models.unet import UNet3DConditionModel
 from ..utils.image_processor import ImageProcessor
-from ..utils.util import read_video, read_audio, write_video
+from ..utils.util import read_video, read_audio, write_video, check_ffmpeg_installed
 from ..whisper.audio2feature import Audio2Feature
 import tqdm
 import soundfile as sf
@@ -316,6 +316,8 @@ class LipsyncPipeline(DiffusionPipeline):
     ):
         is_train = self.unet.training
         self.unet.eval()
+
+        check_ffmpeg_installed()
 
         # 0. Define call parameters
         batch_size = 1

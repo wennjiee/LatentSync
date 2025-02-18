@@ -119,13 +119,13 @@ with gr.Blocks(title="LatentSync Video Processing") as demo:
 
             with gr.Row():
                 guidance_scale = gr.Slider(
-                    minimum=0.1,
-                    maximum=3.0,
-                    value=1.0,
-                    step=0.1,
+                    minimum=1.0,
+                    maximum=3.5,
+                    value=1.5,
+                    step=0.5,
                     label="Guidance Scale",
                 )
-                inference_steps = gr.Slider(minimum=1, maximum=50, value=20, step=1, label="Inference Steps")
+                inference_steps = gr.Slider(minimum=10, maximum=50, value=20, step=1, label="Inference Steps")
 
             with gr.Row():
                 seed = gr.Number(value=1247, label="Random Seed", precision=0)
