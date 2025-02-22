@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
+from pathlib import Path
+current_dir = Path(__file__).resolve().parent
+parent_dir = current_dir.parent
+sys.path.append(str(parent_dir))
+
 import argparse
 from omegaconf import OmegaConf
 import torch
@@ -89,13 +95,13 @@ def main(config, args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--unet_config_path", type=str, default="configs/unet.yaml")
-    parser.add_argument("--inference_ckpt_path", type=str, required=True)
-    parser.add_argument("--video_path", type=str, required=True)
-    parser.add_argument("--audio_path", type=str, required=True)
-    parser.add_argument("--video_out_path", type=str, required=True)
+    parser.add_argument("--unet_config_path", type=str, default="configs/unet/second_stage.yaml")
+    parser.add_argument("--inference_ckpt_path", type=str, default='checkpoints/latentsync_unet.pt')
+    parser.add_argument("--video_path", type=str, default='./data/jiaxin_1.mp4')
+    parser.add_argument("--audio_path", type=str, default='./data/audio.wav')
+    parser.add_argument("--video_out_path", type=str, default='./data/output2.mp4')
     parser.add_argument("--inference_steps", type=int, default=20)
-    parser.add_argument("--guidance_scale", type=float, default=1.0)
+    parser.add_argument("--guidance_scale", type=float, default=1.5)
     parser.add_argument("--seed", type=int, default=1247)
     args = parser.parse_args()
 
