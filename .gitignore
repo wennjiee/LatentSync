@@ -42,6 +42,11 @@ wandb/
 *.zip
 *.whl
 
-!/latentsync/utils/mask.png
+# log files
+*.log
+
+!/latentsync/utils/mask*.png
 /checkpoints/
 !/assets/*
+!/docs/*
+!/internal/*.png
