@@ -12,6 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
+from datetime import datetime
+from pathlib import Path
+current_dir = Path(__file__).resolve().parent
+parent_dir = current_dir.parent
+sys.path.append(str(parent_dir))
+
 import argparse
 import os
 from omegaconf import OmegaConf
@@ -20,8 +27,7 @@ from diffusers import AutoencoderKL, DDIMScheduler
 from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 from accelerate.utils import set_seed
-from latentsync.whisper.audio2feature import Audio2Feature
-from datetime import datetime
+
 
 def main(config, args):
     if not os.path.exists(args.video_path):
