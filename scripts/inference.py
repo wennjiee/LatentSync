@@ -41,6 +41,7 @@ def main(config, args):
 
     print(f"Input video path: {args.video_path}")
     print(f"Input audio path: {args.audio_path}")
+    print(f"Output video path: {args.video_out_path}")
     print(f"Loaded checkpoint path: {args.inference_ckpt_path}")
 
     scheduler = DDIMScheduler.from_pretrained("configs")
@@ -86,6 +87,7 @@ def main(config, args):
     print(f"Initial seed: {torch.initial_seed()}")
 
     pipeline(
+        args = args,
         video_path=args.video_path,
         audio_path=args.audio_path,
         video_out_path=args.video_out_path,
@@ -105,21 +107,22 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--unet_config_path", type=str, default="configs/unet/stage2.yaml")
-    parser.add_argument("--inference_ckpt_path", type=str, required=False, default='./checkpoints/latentsync_unet.pt')
-    parser.add_argument("--video_path", type=str, required=False, default='./data/wwj_222.mp4')
-    parser.add_argument("--audio_path", type=str, required=False, default='./data/1.wav')
-    parser.add_argument("--video_out_path", type=str, required=False, default='./data/output_0319.mp4')
+    parser.add_argument("--inference_ckpt_path", type=str, default='./checkpoints/latentsync_unet.pt')
+    parser.add_argument("--video_path", type=str, default='./data/wwj_3s.mp4')
+    parser.add_argument("--audio_path", type=str, default='./data/intro_6s.wav')
+    parser.add_argument("--video_out_path", type=str, default='')
     parser.add_argument("--inference_steps", type=int, default=20)
     parser.add_argument("--guidance_scale", type=float, default=1.5)
     parser.add_argument("--seed", type=int, default=1247)
     args = parser.parse_args()
 
+    if not args.video_out_path:
+        video_name = os.path.splitext(os.path.basename(args.video_path))[0]
+        audio_name = os.path.splitext(os.path.basename(args.audio_path))[0]
+        args.video_out_path = f"./data/ai-{video_name}-{audio_name}.mp4"
     config = OmegaConf.load(args.unet_config_path)
-
     main(config, args)
 
     end_time = datetime.now()
     elapsed_time = (end_time - start_time).total_seconds()
     print(f'Finish Processing at cost of time {elapsed_time}s')
-
-    main(config, args)

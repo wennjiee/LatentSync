@@ -30,7 +30,7 @@ from einops import rearrange
 import cv2
 
 from ..models.unet import UNet3DConditionModel
-from ..utils.util import read_video, read_audio, write_video, check_ffmpeg_installed
+from ..utils.util import read_video, read_audio, write_video, check_ffmpeg_installed, write_video_from_imgs
 from ..utils.image_processor import ImageProcessor, load_fixed_mask
 from ..whisper.audio2feature import Audio2Feature
 import tqdm
@@ -280,7 +280,31 @@ class LipsyncPipeline(DiffusionPipeline):
             out_frame = self.image_processor.restorer.restore_img(video_frames[index], face, affine_matrices[index])
             out_frames.append(out_frame)
         return np.stack(out_frames, axis=0)
-
+    
+    def restore_video2imgs(self, faces: torch.Tensor, video_frames: np.ndarray, boxes: list, affine_matrices: list, video_frames_dir: str):
+        video_frames = video_frames[: len(faces)]
+        out_frames = []
+        print(f"Restoring {len(faces)} faces...")
+        for index, face in enumerate(tqdm.tqdm(faces)):
+            x1, y1, x2, y2 = boxes[index]
+            height = int(y2 - y1)
+            width = int(x2 - x1)
+            face = torchvision.transforms.functional.resize(face, size=(height, width), antialias=True)
+            face = rearrange(face, "c h w -> h w c")
+            face = (face / 2 + 0.5).clamp(0, 1)
+            face = (face * 255).to(torch.uint8).cpu().numpy()
+            # face = cv2.resize(face, (width, height), interpolation=cv2.INTER_LANCZOS4)
+            out_frame = self.image_processor.restorer.restore_img(video_frames[index], face, affine_matrices[index])
+            out_frames.append(out_frame)
+        
+        print('Write frames into folder')
+        output_dir = video_frames_dir
+        os.makedirs(output_dir, exist_ok=True)
+        for index, out_frame in enumerate(tqdm.tqdm(out_frames)):
+            frame_filename = os.path.join(output_dir, f"frame_{index:05d}.png")
+            cv2.imwrite(frame_filename, out_frame)
+        return
+    
     def loop_video(self, whisper_chunks: list, video_frames: np.ndarray):
         # If the audio is longer than the video, we need to loop the video
         if len(whisper_chunks) > len(video_frames):
@@ -315,6 +339,7 @@ class LipsyncPipeline(DiffusionPipeline):
     @torch.no_grad()
     def __call__(
         self,
+        args,
         video_path: str,
         audio_path: str,
         video_out_path: str,
@@ -370,7 +395,7 @@ class LipsyncPipeline(DiffusionPipeline):
         whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
 
         audio_samples = read_audio(audio_path)
-        video_frames = read_video(video_path, use_decord=False)
+        video_frames = read_video(video_path, use_decord=True)
 
         video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks, video_frames)
 
@@ -469,12 +494,14 @@ class LipsyncPipeline(DiffusionPipeline):
             synced_video_frames.append(decoded_latents)
             # masked_video_frames.append(masked_pixel_values)
 
-        synced_video_frames = self.restore_video(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices)
+        video_frames_dir = f'data/out_frames/{os.path.splitext(os.path.basename(args.video_out_path))[0]}'
+        synced_video_frames = self.restore_video2imgs(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices, video_frames_dir)
         # masked_video_frames = self.restore_video(
         #     torch.cat(masked_video_frames), video_frames, boxes, affine_matrices
         # )
-
-        audio_samples_remain_length = int(synced_video_frames.shape[0] / video_fps * audio_sample_rate)
+        frames_len = len(os.listdir(video_frames_dir))
+        # audio_samples_remain_length = int(synced_video_frames.shape[0] / video_fps * audio_sample_rate)
+        audio_samples_remain_length = int(frames_len / video_fps * audio_sample_rate)
         audio_samples = audio_samples[:audio_samples_remain_length].cpu().numpy()
 
         if is_train:
@@ -485,10 +512,11 @@ class LipsyncPipeline(DiffusionPipeline):
             shutil.rmtree(temp_dir)
         os.makedirs(temp_dir, exist_ok=True)
 
-        write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25)
+        write_video_from_imgs(os.path.join(temp_dir, "video.mp4"), video_frames_dir, fps=25)
+        # write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25)
         # write_video(video_mask_path, masked_video_frames, fps=25)
 
         sf.write(os.path.join(temp_dir, "audio.wav"), audio_samples, audio_sample_rate)
-
-        command = f"ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
+        print('Start to synthesize video with audio')
+        command = f"ffmpeg -y -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
         subprocess.run(command, shell=True)

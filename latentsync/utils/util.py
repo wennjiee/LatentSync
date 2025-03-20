@@ -29,7 +29,7 @@ import cv2
 from decord import AudioReader, VideoReader
 import shutil
 import subprocess
-
+import tqdm
 
 # Machine epsilon for a float32 (single precision)
 eps = np.finfo(np.float32).eps
@@ -48,7 +48,7 @@ def read_video(video_path: str, change_fps=True, use_decord=True):
             shutil.rmtree(temp_dir)
         os.makedirs(temp_dir, exist_ok=True)
         command = (
-            f"ffmpeg -loglevel error -y -nostdin -i {video_path} -r 25 -crf 18 {os.path.join(temp_dir, 'video.mp4')}"
+            f"ffmpeg -y -nostdin -i {video_path} -r 25 -crf 18 {os.path.join(temp_dir, 'video.mp4')}"
         )
         subprocess.run(command, shell=True)
         target_video_path = os.path.join(temp_dir, "video.mp4")
@@ -79,22 +79,25 @@ def read_video_cv2(video_path: str):
 
     frames = []
 
-    while True:
-        # Read a frame
-        ret, frame = cap.read()
+    try:
+        while True:
+            # Read a frame
+            ret, frame = cap.read()
 
-        # If frame is read correctly ret is True
-        if not ret:
-            break
+            # If frame is read correctly ret is True
+            if not ret:
+                break
 
-        # Convert BGR to RGB
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Convert BGR to RGB
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        frames.append(frame_rgb)
-
-    # Release the video capture object
-    cap.release()
-
+            frames.append(frame_rgb)
+    except Exception as e:
+        print(f'Exception ocurred, E is {e}')
+        return np.array([])
+    finally:
+        # Release the video capture object
+        cap.release()
     return np.array(frames)
 
 
@@ -119,6 +122,26 @@ def write_video(video_output_path: str, video_frames: np.ndarray, fps: int):
         out.write(frame)
     out.release()
 
+def write_video_from_imgs(video_output_path: str, frame_dir: str, fps: int):
+    print(f'write video from img: {video_output_path}')
+    first_frame_path = os.path.join(frame_dir, "frame_00000.png")
+    first_frame = cv2.imread(first_frame_path)
+    if first_frame is None:
+        raise ValueError(f"无法读取第一帧：{first_frame_path}")
+    height, width = first_frame.shape[:2]
+    out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+    frame_files = sorted(os.listdir(frame_dir))
+    
+    for frame_file in tqdm.tqdm(frame_files):
+        frame_path = os.path.join(frame_dir, frame_file)
+        frame = cv2.imread(frame_path)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        if frame is None:
+            print(f"警告：无法读取帧 {frame_path}，跳过")
+            continue
+        out.write(frame)
+    out.release()
+    print(f"write to path: {video_output_path}")
 
 def init_dist(backend="nccl", **kwargs):
     """Initializes distributed environment."""
