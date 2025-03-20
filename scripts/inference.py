@@ -27,7 +27,7 @@ from diffusers import AutoencoderKL, DDIMScheduler
 from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 from accelerate.utils import set_seed
-
+from latentsync.whisper.audio2feature import Audio2Feature
 
 def main(config, args):
     if not os.path.exists(args.video_path):
