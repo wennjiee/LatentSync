@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import os
-import imageio
 import numpy as np
 import json
 from typing import Union
