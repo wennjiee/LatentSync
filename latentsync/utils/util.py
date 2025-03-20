@@ -54,7 +54,7 @@ def read_video(video_path: str, change_fps=True, use_decord=True):
         target_video_path = os.path.join(temp_dir, "video.mp4")
     else:
         target_video_path = video_path
-
+    print(f'Start reading video with method use_decord:{use_decord}')
     if use_decord:
         return read_video_decord(target_video_path)
     else:
