@@ -36,6 +36,8 @@ from ..whisper.audio2feature import Audio2Feature
 import tqdm
 import soundfile as sf
 
+import gc
+
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -264,8 +266,12 @@ class LipsyncPipeline(DiffusionPipeline):
         faces = torch.stack(faces)
         return faces, boxes, affine_matrices
 
-    def restore_video(self, faces: torch.Tensor, video_frames: np.ndarray, boxes: list, affine_matrices: list):
-        video_frames = video_frames[: len(faces)]
+    def restore_video(self, faces: torch.Tensor, video_frames: np.ndarray, boxes: list, affine_matrices: list, start_idx: int = 0, LOOP_COEFF: int = 0):
+        end_idx = start_idx + LOOP_COEFF * len(faces)
+        video_frames = video_frames[start_idx: end_idx]
+        boxes = boxes[start_idx: end_idx]
+        affine_matrices = affine_matrices[start_idx: end_idx]
+        # video_frames = video_frames[: len(faces)]
         out_frames = []
         print(f"Restoring {len(faces)} faces...")
         for index, face in enumerate(tqdm.tqdm(faces)):
@@ -390,7 +396,7 @@ class LipsyncPipeline(DiffusionPipeline):
 
         # 4. Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
-
+        # whisper_chunks 18min音频特征 27976帧 占用 1G内存
         whisper_feature = self.audio_encoder.audio2feat(audio_path)
         whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
 
@@ -398,9 +404,6 @@ class LipsyncPipeline(DiffusionPipeline):
         video_frames = read_video(video_path, use_decord=True)
 
         video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks, video_frames)
-
-        synced_video_frames = []
-        masked_video_frames = []
 
         num_channels_latents = self.vae.config.latent_channels
 
@@ -417,6 +420,12 @@ class LipsyncPipeline(DiffusionPipeline):
         )
 
         num_inferences = math.ceil(len(whisper_chunks) / num_frames)
+        temp_dir = "temp"
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_videos = []
+        cnt = 0
+        LOOP_COEFF = 4
+        synced_video_frames = []
         for i in tqdm.tqdm(range(num_inferences), desc="Doing inference..."):
             if self.denoising_unet.add_audio_layer:
                 audio_embeds = torch.stack(whisper_chunks[i * num_frames : (i + 1) * num_frames])
@@ -492,31 +501,52 @@ class LipsyncPipeline(DiffusionPipeline):
                 decoded_latents, ref_pixel_values, 1 - masks, device, weight_dtype
             )
             synced_video_frames.append(decoded_latents)
-            # masked_video_frames.append(masked_pixel_values)
+            if (i + 1) % LOOP_COEFF == 0:
+                synced_video_frames = self.restore_video(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices, num_frames*cnt*LOOP_COEFF, LOOP_COEFF)
 
-        video_frames_dir = f'data/out_frames/{os.path.splitext(os.path.basename(args.video_out_path))[0]}'
-        synced_video_frames = self.restore_video2imgs(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices, video_frames_dir)
-        # masked_video_frames = self.restore_video(
-        #     torch.cat(masked_video_frames), video_frames, boxes, affine_matrices
-        # )
-        frames_len = len(os.listdir(video_frames_dir))
-        # audio_samples_remain_length = int(synced_video_frames.shape[0] / video_fps * audio_sample_rate)
-        audio_samples_remain_length = int(frames_len / video_fps * audio_sample_rate)
+                if is_train:
+                    self.denoising_unet.train()
+
+                temp_video_path = os.path.join(temp_dir, f"temp_{cnt}.mp4")
+                write_video(temp_video_path, synced_video_frames, fps=25)
+                temp_videos.append(temp_video_path)
+                synced_video_frames = []
+                gc.collect()
+                cnt = cnt + 1
+
+        # 处理剩余的未保存帧
+        if synced_video_frames:
+            synced_video_frames = self.restore_video(
+                torch.cat(synced_video_frames), 
+                video_frames, 
+                boxes, 
+                affine_matrices, 
+                num_frames * cnt * LOOP_COEFF, 
+                LOOP_COEFF
+            )
+
+            if is_train:
+                self.denoising_unet.train()
+
+            temp_video_path = os.path.join(temp_dir, f"temp_{cnt}.mp4")
+            write_video(temp_video_path, synced_video_frames, fps=25)
+            temp_videos.append(temp_video_path)
+            synced_video_frames = []
+            gc.collect()
+        if len(temp_videos) > 1:
+            concat_file = os.path.join(temp_dir, "concat_list.txt")
+            with open(concat_file, "w") as f:
+                for video in temp_videos:
+                    f.write(f"file '{video}'\n")
+
+            final_video_out = './temp/temp_all.mp4'
+            command = f"ffmpeg -y -f concat -safe 0 -i {concat_file} -c copy {final_video_out}"
+            subprocess.run(command, shell=True)
+            print(f"Final video saved: {final_video_out}")
+        
+        audio_samples_remain_length = int(len(video_frames) / video_fps * audio_sample_rate)
         audio_samples = audio_samples[:audio_samples_remain_length].cpu().numpy()
-
-        if is_train:
-            self.denoising_unet.train()
-
-        temp_dir = "temp"
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-        os.makedirs(temp_dir, exist_ok=True)
-
-        write_video_from_imgs(os.path.join(temp_dir, "video.mp4"), video_frames_dir, fps=25)
-        # write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25)
-        # write_video(video_mask_path, masked_video_frames, fps=25)
-
         sf.write(os.path.join(temp_dir, "audio.wav"), audio_samples, audio_sample_rate)
         print('Start to synthesize video with audio')
-        command = f"ffmpeg -y -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
+        command = f"ffmpeg -y -nostdin -i {final_video_out} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
         subprocess.run(command, shell=True)
