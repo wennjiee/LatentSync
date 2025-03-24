@@ -24,7 +24,7 @@ wandb/
 /models/
 /venv/
 /detect_results/
-/temp
+/temp*
 
 # checkpoint files
 *.safetensors
