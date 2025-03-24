@@ -40,35 +40,62 @@ def read_json(filepath: str):
         json_dict = json.load(f)
     return json_dict
 
+def get_video_resolution(video_path):
+    command = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "json", video_path
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    video_info = json.loads(result.stdout)
+    width = video_info["streams"][0]["width"]
+    height = video_info["streams"][0]["height"]
+    return width, height
 
-def read_video(video_path: str, change_fps=True, use_decord=True):
+def read_video(video_path: str, change_fps=True, use_decord=True, max_frames=-1):
     if change_fps:
         temp_dir = "temp"
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         os.makedirs(temp_dir, exist_ok=True)
+        width, height = get_video_resolution(video_path)
+        print(f'width={width}, height={height}')
+        scale_option = ""
+        # check if resolution > 1080P, convert it to 1080P
+        if height > 1080:
+            scale_option = "-vf scale=-1:1080"
+        # 考虑显卡加速
         command = (
-            f"ffmpeg -y -nostdin -i {video_path} -r 25 -crf 18 {os.path.join(temp_dir, 'video.mp4')}"
+            f"ffmpeg -y -nostdin -i {video_path} {scale_option} -r 25 -crf 18 -threads 8 {os.path.join(temp_dir, 'video.mp4')}"
         )
+        print(f'cmd = {command}')
         subprocess.run(command, shell=True)
         target_video_path = os.path.join(temp_dir, "video.mp4")
     else:
         target_video_path = video_path
     print(f'Start reading video with method use_decord:{use_decord}')
     if use_decord:
-        return read_video_decord(target_video_path)
+        return read_video_decord(target_video_path, max_frames)
     else:
-        return read_video_cv2(target_video_path)
+        return read_video_cv2(target_video_path, max_frames)
 
 
-def read_video_decord(video_path: str):
+def read_video_decord(video_path: str, max_frames: int):
     vr = VideoReader(video_path)
-    video_frames = vr[:].asnumpy()
-    vr.seek(0)
+    print('Reading video...')
+    try:
+        video_frames = vr[:max_frames].asnumpy()
+        vr.seek(0)
+    except Exception as e:
+        print(f'Exception ocurred, E is {e}')
+        video_frames = []
+        return video_frames
+    print('Finish reading video...')
     return video_frames
 
 
-def read_video_cv2(video_path: str):
+def read_video_cv2(video_path: str, max_frames: int):
     # Open the video file
     cap = cv2.VideoCapture(video_path)
 
@@ -85,7 +112,7 @@ def read_video_cv2(video_path: str):
             ret, frame = cap.read()
 
             # If frame is read correctly ret is True
-            if not ret:
+            if not ret or len(frames) > max_frames:
                 break
 
             # Convert BGR to RGB

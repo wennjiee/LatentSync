@@ -37,6 +37,8 @@ import tqdm
 import soundfile as sf
 
 import gc
+import contextlib
+import wave
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -274,7 +276,7 @@ class LipsyncPipeline(DiffusionPipeline):
         # video_frames = video_frames[: len(faces)]
         out_frames = []
         print(f"Restoring {len(faces)} faces...")
-        for index, face in enumerate(tqdm.tqdm(faces)):
+        for index, face in enumerate(tqdm.tqdm(faces, position=2)):
             x1, y1, x2, y2 = boxes[index]
             height = int(y2 - y1)
             width = int(x2 - x1)
@@ -342,6 +344,13 @@ class LipsyncPipeline(DiffusionPipeline):
 
         return video_frames, faces, boxes, affine_matrices
 
+    def get_wav_duration(self, wav_path):
+        with contextlib.closing(wave.open(wav_path, 'r')) as wf:
+            frames = wf.getnframes()
+            rate = wf.getframerate()
+            duration = frames / float(rate)
+        return duration
+    
     @torch.no_grad()
     def __call__(
         self,
@@ -397,21 +406,27 @@ class LipsyncPipeline(DiffusionPipeline):
         # 4. Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
         # whisper_chunks 18min音频特征 27976帧 占用 1G内存
+        duration = self.get_wav_duration(audio_path)
+        ONE_HOUR = 3600
+        if duration > ONE_HOUR:
+            raise ValueError(f"audio time = {duration:.2f}s > 1 hour, out of limits")
         whisper_feature = self.audio_encoder.audio2feat(audio_path)
         whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
-        whisper_chunks = whisper_chunks[0: 1702]
-        video_frames = read_video(video_path, use_decord=False)
-
-        # 每批处理 x 音帧
-        AUDIO_FRAMES_BATCH = 500  
-        temp_video_index = 0
+        
+        # workspace dir
         temp_dir = "temp"
         os.makedirs(temp_dir, exist_ok=True)
+        temp_video_index = 0
         temp_videos = []
+
+        # 每批处理 x 音帧
+        AUDIO_FRAMES_BATCH = 500
+        video_load_frames = min(len(whisper_chunks), 1000)
+        video_frames = read_video(video_path, use_decord=False, max_frames=video_load_frames)
         video_frames = video_frames[::-1]
         video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks[0: AUDIO_FRAMES_BATCH], video_frames)
         
-        for start_idx in tqdm.tqdm(range(0, len(whisper_chunks), AUDIO_FRAMES_BATCH), desc="Processing audio batches..."):
+        for start_idx in tqdm.tqdm(range(0, len(whisper_chunks), AUDIO_FRAMES_BATCH), position=0, desc="Processing audio batches..."):
             
             end_idx = min(start_idx + AUDIO_FRAMES_BATCH, len(whisper_chunks))
             current_chunks = whisper_chunks[start_idx: end_idx]
@@ -440,7 +455,7 @@ class LipsyncPipeline(DiffusionPipeline):
             LOOP_COEFF = 4
             synced_video_frames = []
             cnt = 0
-            for i in tqdm.tqdm(range(num_inferences), desc="Doing inference..."):
+            for i in tqdm.tqdm(range(num_inferences), position=1, desc="Doing inference..."):
                 if self.denoising_unet.add_audio_layer:
                     audio_embeds = torch.stack(current_chunks[i * num_frames : (i + 1) * num_frames])
                     audio_embeds = audio_embeds.to(device, dtype=weight_dtype)
