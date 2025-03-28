@@ -111,7 +111,7 @@ if __name__ == "__main__":
     parser.add_argument("--video_path", type=str, default='./data/wwj_3s.mp4')
     parser.add_argument("--audio_path", type=str, default='./data/intro_6s.wav')
     parser.add_argument("--video_out_path", type=str, default='')
-    parser.add_argument("--inference_steps", type=int, default=20)
+    parser.add_argument("--inference_steps", type=int, default=50)
     parser.add_argument("--guidance_scale", type=float, default=1.5)
     parser.add_argument("--seed", type=int, default=1247)
     args = parser.parse_args()
