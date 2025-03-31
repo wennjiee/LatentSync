@@ -537,8 +537,8 @@ class LipsyncPipeline(DiffusionPipeline):
                     if is_train:
                         self.denoising_unet.train()
 
-                    temp_video_path = os.path.join(temp_dir, f"temp_{temp_video_index}.mp4")
-                    temp_videos.append(f"temp_{temp_video_index}.mp4")
+                    temp_video_path =  os.path.abspath(os.path.join(temp_dir, f"temp_{temp_video_index}.mp4"))
+                    temp_videos.append(temp_video_path)
                     write_video(temp_video_path, synced_video_frames, fps=25)
                     temp_video_index = temp_video_index + 1
                     synced_video_frames = []
@@ -551,8 +551,8 @@ class LipsyncPipeline(DiffusionPipeline):
                 if is_train:
                     self.denoising_unet.train()
 
-                temp_video_path = os.path.join(temp_dir, f"temp_{temp_video_index}.mp4")
-                temp_videos.append(f"temp_{temp_video_index}.mp4")
+                temp_video_path =  os.path.abspath(os.path.join(temp_dir, f"temp_{temp_video_index}.mp4"))
+                temp_videos.append(temp_video_path)
                 write_video(temp_video_path, synced_video_frames, fps=25)
                 temp_video_index += 1
                 synced_video_frames = []
