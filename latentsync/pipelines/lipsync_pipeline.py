@@ -420,7 +420,7 @@ class LipsyncPipeline(DiffusionPipeline):
         temp_videos = []
 
         # 每批处理 x 音帧
-        AUDIO_FRAMES_BATCH = 500
+        AUDIO_FRAMES_BATCH = min(len(whisper_chunks), 500)
         video_load_frames = min(len(whisper_chunks), 1000)
         video_frames = read_video(video_path, use_decord=False, max_frames=video_load_frames)
         video_frames = video_frames[::-1]
