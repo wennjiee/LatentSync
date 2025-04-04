@@ -63,8 +63,8 @@ def read_video(video_path: str, change_fps=True, use_decord=True, max_frames=-1)
         print(f'width={width}, height={height}')
         scale_option = ""
         # check if resolution > 1080P, convert it to 1080P
-        if height > 1080:
-            scale_option = "-vf scale=-1:1080"
+        # if height > 1080:
+        #     scale_option = "-vf scale=-1:1080"
         # 考虑显卡加速
         command = (
             f"ffmpeg -y -nostdin -i {video_path} {scale_option} -r 25 -crf 18 -threads 8 {os.path.join(temp_dir, 'video.mp4')}"
