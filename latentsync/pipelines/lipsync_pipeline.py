@@ -419,9 +419,9 @@ class LipsyncPipeline(DiffusionPipeline):
         temp_video_index = 0
         temp_videos = []
 
-        # 每批处理 x 音帧
-        AUDIO_FRAMES_BATCH = min(len(whisper_chunks), 500)
-        video_load_frames = min(len(whisper_chunks), 1000)
+        # 每批处理 x 音帧, 1500 frames = 1min
+        AUDIO_FRAMES_BATCH = min(len(whisper_chunks), 1500)
+        video_load_frames = min(len(whisper_chunks), 1500)
         video_frames = read_video(video_path, use_decord=False, max_frames=video_load_frames)
         video_frames = video_frames[::-1]
         video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks[0: AUDIO_FRAMES_BATCH], video_frames)
@@ -531,7 +531,8 @@ class LipsyncPipeline(DiffusionPipeline):
                 )
                 synced_video_frames.append(decoded_latents)
                 
-                if (i + 1) % LOOP_COEFF == 0:
+                # Synthesize video per LOOP_COEFF or at the end of process
+                if (i + 1) % LOOP_COEFF == 0 or i == num_inferences - 1:
                     synced_video_frames = self.restore_video(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices, num_frames*cnt*LOOP_COEFF, LOOP_COEFF)
 
                     if is_train:
@@ -544,20 +545,7 @@ class LipsyncPipeline(DiffusionPipeline):
                     synced_video_frames = []
                     cnt = cnt + 1
 
-            # 处理剩余的未保存帧
-            if synced_video_frames:
-                synced_video_frames = self.restore_video(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices, num_frames * cnt * LOOP_COEFF, LOOP_COEFF)
-
-                if is_train:
-                    self.denoising_unet.train()
-
-                temp_video_path =  os.path.abspath(os.path.join(temp_dir, f"temp_{temp_video_index}.mp4"))
-                temp_videos.append(temp_video_path)
-                write_video(temp_video_path, synced_video_frames, fps=25)
-                temp_video_index += 1
-                synced_video_frames = []
-        
-        if len(temp_videos) > 1:
+        if len(temp_videos) >= 1:
             concat_file = os.path.join(temp_dir, "concat_list.txt")
             with open(concat_file, "w") as f:
                 for video in temp_videos:
