@@ -407,8 +407,8 @@ class LipsyncPipeline(DiffusionPipeline):
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
         # whisper_chunks 18min音频特征 27976帧 占用 1G内存
         duration = self.get_wav_duration(audio_path)
-        ONE_HOUR = 3600
-        if duration > ONE_HOUR:
+        MAX_DURATION = 7200
+        if duration > MAX_DURATION:
             raise ValueError(f"audio time = {duration:.2f}s > 1 hour, out of limits")
         whisper_feature = self.audio_encoder.audio2feat(audio_path)
         whisper_chunks = self.audio_encoder.feature2chunks(feature_array=whisper_feature, fps=video_fps)
