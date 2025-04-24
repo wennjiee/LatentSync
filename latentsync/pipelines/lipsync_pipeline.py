@@ -385,7 +385,7 @@ class LipsyncPipeline(DiffusionPipeline):
         device = self._execution_device
         mask_image = load_fixed_mask(height, mask_image_path)
         self.image_processor = ImageProcessor(height, mask=mask, device="cuda", mask_image=mask_image)
-        self.set_progress_bar_config(desc=f"Sample frames: {num_frames}")
+        self.set_progress_bar_config(position=2, desc=f"Sample frames: {num_frames}")
 
         # 1. Default height and width to unet
         height = height or self.denoising_unet.config.sample_size * self.vae_scale_factor
@@ -426,7 +426,7 @@ class LipsyncPipeline(DiffusionPipeline):
         video_frames = video_frames[::-1]
         video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks[0: AUDIO_FRAMES_BATCH], video_frames)
         
-        for start_idx in tqdm.tqdm(range(0, len(whisper_chunks), AUDIO_FRAMES_BATCH), position=0, desc="Processing audio batches..."):
+        for start_idx in tqdm.tqdm(range(0, len(whisper_chunks), AUDIO_FRAMES_BATCH), position=0, desc="Overall progress..."):
             
             end_idx = min(start_idx + AUDIO_FRAMES_BATCH, len(whisper_chunks))
             current_chunks = whisper_chunks[start_idx: end_idx]
