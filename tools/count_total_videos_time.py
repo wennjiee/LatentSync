@@ -18,5 +18,5 @@ def count_total_videos_time(fileslist_path: str):
 
 
 if __name__ == "__main__":
-    fileslist_path = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/fileslist/data_v9_full.txt"
+    fileslist_path = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/fileslist/data_v10_core.txt"
     count_total_videos_time(fileslist_path)

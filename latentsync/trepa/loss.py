@@ -16,6 +16,7 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange
 from .third_party.VideoMAEv2.utils import load_videomae_model
+from ..utils.util import check_model_and_download
 
 
 class TREPALoss:
@@ -25,6 +26,7 @@ class TREPALoss:
         ckpt_path="checkpoints/auxiliary/vit_g_hybrid_pt_1200e_ssv2_ft.pth",
         with_cp=False,
     ):
+        check_model_and_download(ckpt_path)
         self.model = load_videomae_model(device, ckpt_path, with_cp).eval().to(dtype=torch.float16)
         self.model.requires_grad_(False)
 

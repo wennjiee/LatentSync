@@ -1,10 +1,10 @@
 data:
   syncnet_config_path: configs/syncnet/syncnet_16_pixel_attn.yaml
   train_output_dir: debug/unet
-  train_fileslist: /mnt/bn/maliva-gen-ai-v2/chunyu.li/fileslist/data_v9_syncnet.txt
+  train_fileslist: /mnt/bn/maliva-gen-ai-v2/chunyu.li/fileslist/data_v10_core.txt
   train_data_dir: ""
-  audio_embeds_cache_dir: /mnt/bn/maliva-gen-ai-v2/chunyu.li/audio_cache/whisper_new
-  audio_mel_cache_dir: /mnt/bn/maliva-gen-ai-v2/chunyu.li/audio_cache/mel_new
+  audio_embeds_cache_dir: /mnt/bn/maliva-gen-ai-v2/chunyu.li/audio_cache/embeds
+  audio_mel_cache_dir: /mnt/bn/maliva-gen-ai-v2/chunyu.li/audio_cache/mel
 
   val_video_path: assets/demo1_video.mp4
   val_audio_path: assets/demo1_audio.wav
@@ -12,7 +12,6 @@ data:
   num_workers: 12 # 12
   num_frames: 16
   resolution: 256
-  mask: fix_mask
   mask_image_path: latentsync/utils/mask.png
   audio_sample_rate: 16000
   video_fps: 25
@@ -28,7 +27,7 @@ run:
   sync_loss_weight: 0.05
   perceptual_loss_weight: 0.1 # 0.1
   recon_loss_weight: 1 # 1
-  guidance_scale: 1.5 # 1.5 or 1.0
+  guidance_scale: 2.0 # [1.0 - 3.0]
   trepa_loss_weight: 10
   inference_steps: 20
   seed: 1247

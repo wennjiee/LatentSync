@@ -118,7 +118,9 @@ class Audio2Feature:
         if self.audio_embeds_cache_dir == "" or self.audio_embeds_cache_dir is None:
             return self._audio2feat(audio_path)
 
-        audio_embeds_cache_path = os.path.join(self.audio_embeds_cache_dir, os.path.basename(audio_path) + ".pt")
+        audio_embeds_cache_path = os.path.join(
+            self.audio_embeds_cache_dir, os.path.basename(audio_path).replace(".mp4", "_embeds.pt")
+        )
 
         if os.path.isfile(audio_embeds_cache_path):
             try:

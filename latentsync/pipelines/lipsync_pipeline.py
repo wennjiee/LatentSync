@@ -328,7 +328,6 @@ class LipsyncPipeline(DiffusionPipeline):
         guidance_scale: float = 1.5,
         weight_dtype: Optional[torch.dtype] = torch.float16,
         eta: float = 0.0,
-        mask: str = "fix_mask",
         mask_image_path: str = "latentsync/utils/mask.png",
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
@@ -344,7 +343,7 @@ class LipsyncPipeline(DiffusionPipeline):
         batch_size = 1
         device = self._execution_device
         mask_image = load_fixed_mask(height, mask_image_path)
-        self.image_processor = ImageProcessor(height, mask=mask, device="cuda", mask_image=mask_image)
+        self.image_processor = ImageProcessor(height, device="cuda", mask_image=mask_image)
         self.set_progress_bar_config(desc=f"Sample frames: {num_frames}")
 
         # 1. Default height and width to unet
@@ -375,7 +374,6 @@ class LipsyncPipeline(DiffusionPipeline):
         video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks, video_frames)
 
         synced_video_frames = []
-        masked_video_frames = []
 
         num_channels_latents = self.vae.config.latent_channels
 
@@ -467,12 +465,8 @@ class LipsyncPipeline(DiffusionPipeline):
                 decoded_latents, ref_pixel_values, 1 - masks, device, weight_dtype
             )
             synced_video_frames.append(decoded_latents)
-            # masked_video_frames.append(masked_pixel_values)
 
         synced_video_frames = self.restore_video(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices)
-        # masked_video_frames = self.restore_video(
-        #     torch.cat(masked_video_frames), video_frames, boxes, affine_matrices
-        # )
 
         audio_samples_remain_length = int(synced_video_frames.shape[0] / video_fps * audio_sample_rate)
         audio_samples = audio_samples[:audio_samples_remain_length].cpu().numpy()
@@ -486,9 +480,8 @@ class LipsyncPipeline(DiffusionPipeline):
         os.makedirs(temp_dir, exist_ok=True)
 
         write_video(os.path.join(temp_dir, "video.mp4"), synced_video_frames, fps=25)
-        # write_video(video_mask_path, masked_video_frames, fps=25)
 
         sf.write(os.path.join(temp_dir, "audio.wav"), audio_samples, audio_sample_rate)
 
-        command = f"ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
+        command = f"ffmpeg -y -loglevel error -nostdin -i {os.path.join(temp_dir, 'video.mp4')} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -crf 18 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
         subprocess.run(command, shell=True)

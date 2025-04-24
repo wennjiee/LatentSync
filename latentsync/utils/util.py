@@ -16,7 +16,9 @@ import os
 import numpy as np
 import json
 from typing import Union
+from pathlib import Path
 import matplotlib.pyplot as plt
+import imageio
 
 import torch
 import torch.nn as nn
@@ -111,6 +113,19 @@ def read_audio(audio_path: str, audio_sample_rate: int = 16000):
 
 
 def write_video(video_output_path: str, video_frames: np.ndarray, fps: int):
+    with imageio.get_writer(
+        video_output_path,
+        fps=fps,
+        codec="libx264",
+        macro_block_size=None,
+        ffmpeg_params=["-crf", "13"],
+        ffmpeg_log_level="error",
+    ) as writer:
+        for video_frame in video_frames:
+            writer.append_data(video_frame)
+
+
+def write_video_cv2(video_output_path: str, video_frames: np.ndarray, fps: int):
     height, width = video_frames[0].shape[:2]
     out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
     # out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"vp09"), fps, (width, height))
@@ -257,3 +272,10 @@ def check_ffmpeg_installed():
     result = subprocess.run("ffmpeg -version", stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     if not result.returncode == 0:
         raise FileNotFoundError("ffmpeg not found, please install it by:\n    $ conda install -c conda-forge ffmpeg")
+
+
+def check_model_and_download(ckpt_path: str, huggingface_model_id: str = "ByteDance/LatentSync-1.5"):
+    if not os.path.exists(ckpt_path):
+        ckpt_path_obj = Path(ckpt_path)
+        download_cmd = f"huggingface-cli download {huggingface_model_id} {Path(*ckpt_path_obj.parts[1:])} --local-dir {Path(ckpt_path_obj.parts[0])}"
+        subprocess.run(download_cmd, shell=True)

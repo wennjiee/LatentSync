@@ -89,7 +89,7 @@ class UNetDataset(Dataset):
         setattr(
             self,
             f"image_processor_{worker_id}",
-            ImageProcessor(self.resolution, self.mask, mask_image=self.mask_image),
+            ImageProcessor(self.resolution, mask_image=self.mask_image),
         )
 
     def __getitem__(self, idx):

@@ -42,7 +42,7 @@ class SyncNetDataset(Dataset):
 
         self.audio_sample_rate = config.data.audio_sample_rate
         self.video_fps = config.data.video_fps
-        self.image_processor = ImageProcessor(resolution=config.data.resolution, mask="half")
+        self.image_processor = ImageProcessor(resolution=config.data.resolution)
         self.audio_mel_cache_dir = config.data.audio_mel_cache_dir
         os.makedirs(self.audio_mel_cache_dir, exist_ok=True)
 

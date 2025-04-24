@@ -86,27 +86,17 @@ def create_args(
 
 
 # Create Gradio interface
-with gr.Blocks(title="LatentSync Video Processing") as demo:
+with gr.Blocks(title="LatentSync demo") as demo:
     gr.Markdown(
-        """
-    # LatentSync: Taming Audio-Conditioned Latent Diffusion Models for Lip Sync with SyncNet Supervision
-    Upload a video and audio file to process with LatentSync model.
-
-    <div align="center">
-        <strong>Chunyu Li1,2  Chao Zhang1  Weikai Xu1  Jinghui Xie1,†  Weiguo Feng1
-        Bingyue Peng1  Weiwei Xing2,†</strong>
-    </div>
-
-    <div align="center">
-        <strong>1ByteDance   2Beijing Jiaotong University</strong>
-    </div>
+    """
+    <h1 align="center">LatentSync</h1>
 
     <div style="display:flex;justify-content:center;column-gap:4px;">
         <a href="https://github.com/bytedance/LatentSync">
             <img src='https://img.shields.io/badge/GitHub-Repo-blue'>
         </a> 
-        <a href="https://arxiv.org/pdf/2412.09262">
-            <img src='https://img.shields.io/badge/ArXiv-Paper-red'>
+        <a href="https://arxiv.org/abs/2412.09262">
+            <img src='https://img.shields.io/badge/arXiv-Paper-red'>
         </a>
     </div>
     """
@@ -120,8 +110,8 @@ with gr.Blocks(title="LatentSync Video Processing") as demo:
             with gr.Row():
                 guidance_scale = gr.Slider(
                     minimum=1.0,
-                    maximum=2.5,
-                    value=1.5,
+                    maximum=3.0,
+                    value=2.0,
                     step=0.5,
                     label="Guidance Scale",
                 )

@@ -12,12 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from latentsync.utils.util import read_video, write_video
-from latentsync.utils.image_processor import ImageProcessor
+from latentsync.utils.util import write_video
+from latentsync.utils.image_processor import VideoProcessor
 import torch
-from einops import rearrange
 import os
-import tqdm
 import subprocess
 from multiprocessing import Process
 import shutil
@@ -35,25 +33,6 @@ def gather_video_paths(input_dir, output_dir):
             paths.append((video_input, video_output))
         elif os.path.isdir(os.path.join(input_dir, video)):
             gather_video_paths(os.path.join(input_dir, video), os.path.join(output_dir, video))
-
-
-class FaceDetector:
-    def __init__(self, resolution: int = 512, device: str = "cpu"):
-        self.image_processor = ImageProcessor(resolution, "fix_mask", device)
-
-    def affine_transform_video(self, video_path):
-        video_frames = read_video(video_path, change_fps=False)
-        results = []
-        for frame in video_frames:
-            frame, _, _ = self.image_processor.affine_transform(frame, allow_multi_faces=False)
-            results.append(frame)
-        results = torch.stack(results)
-
-        results = rearrange(results, "f c h w -> f h w c").numpy()
-        return results
-
-    def close(self):
-        self.image_processor.close()
 
 
 def combine_video_audio(video_frames, video_input_path, video_output_path, process_temp_dir):
@@ -76,13 +55,13 @@ def combine_video_audio(video_frames, video_input_path, video_output_path, proce
 
 def func(paths, process_temp_dir, device_id, resolution):
     os.makedirs(process_temp_dir, exist_ok=True)
-    face_detector = FaceDetector(resolution, f"cuda:{device_id}")
+    video_processor = VideoProcessor(resolution, f"cuda:{device_id}")
 
     for video_input, video_output in paths:
         if os.path.isfile(video_output):
             continue
         try:
-            video_frames = face_detector.affine_transform_video(video_input)
+            video_frames = video_processor.affine_transform_video(video_input)
         except Exception as e:  # Handle the exception of face not detcted
             print(f"Exception: {e} - {video_input}")
             continue
@@ -90,8 +69,6 @@ def func(paths, process_temp_dir, device_id, resolution):
         os.makedirs(os.path.dirname(video_output), exist_ok=True)
         combine_video_audio(video_frames, video_input, video_output, process_temp_dir)
         print(f"Saved: {video_output}")
-
-    face_detector.close()
 
 
 def split(a, n):
@@ -128,8 +105,8 @@ def affine_transform_multi_gpus(input_dir, output_dir, temp_dir, resolution, num
 
 
 if __name__ == "__main__":
-    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/willdata2/segmented"
-    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/willdata2/affine_transformed"
+    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/segmented"
+    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/affine_transformed"
     temp_dir = "temp"
     resolution = 256
     num_workers = 10  # How many processes per device
