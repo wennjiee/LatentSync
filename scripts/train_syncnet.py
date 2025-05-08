@@ -121,23 +121,25 @@ def main(config):
         list(filter(lambda p: p.requires_grad, syncnet.parameters())), lr=config.optimizer.lr
     )
 
+    global_step = 0
+    train_step_list = []
+    train_loss_list = []
+    val_step_list = []
+    val_loss_list = []
+
     if config.ckpt.resume_ckpt_path != "":
         if is_main_process:
             logger.info(f"Load checkpoint from: {config.ckpt.resume_ckpt_path}")
         ckpt = torch.load(config.ckpt.resume_ckpt_path, map_location=device, weights_only=True)
 
         syncnet.load_state_dict(ckpt["state_dict"])
-        global_step = ckpt["global_step"]
-        train_step_list = ckpt["train_step_list"]
-        train_loss_list = ckpt["train_loss_list"]
-        val_step_list = ckpt["val_step_list"]
-        val_loss_list = ckpt["val_loss_list"]
-    else:
-        global_step = 0
-        train_step_list = []
-        train_loss_list = []
-        val_step_list = []
-        val_loss_list = []
+
+        if "global_step" in ckpt:
+            global_step = ckpt["global_step"]
+            train_step_list = ckpt["train_step_list"]
+            train_loss_list = ckpt["train_loss_list"]
+            val_step_list = ckpt["val_step_list"]
+            val_loss_list = ckpt["val_loss_list"]
 
     # DDP wrapper
     syncnet = DDP(syncnet, device_ids=[local_rank], output_device=local_rank)

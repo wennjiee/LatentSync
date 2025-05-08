@@ -23,6 +23,7 @@ from ..utils.image_processor import ImageProcessor, load_fixed_mask
 from ..utils.audio import melspectrogram
 from decord import AudioReader, VideoReader, cpu
 import torch.nn.functional as F
+from pathlib import Path
 
 
 class UNetDataset(Dataset):
@@ -45,11 +46,12 @@ class UNetDataset(Dataset):
 
         self.audio_sample_rate = config.data.audio_sample_rate
         self.video_fps = config.data.video_fps
-        self.mask = config.data.mask
-        self.mask_image = load_fixed_mask(self.resolution, config.data.mask_image_path)
+        self.image_processor = ImageProcessor(
+            self.resolution, mask_image=load_fixed_mask(self.resolution, config.data.mask_image_path)
+        )
         self.load_audio_data = config.model.add_audio_layer and config.run.use_syncnet
         self.audio_mel_cache_dir = config.data.audio_mel_cache_dir
-        os.makedirs(self.audio_mel_cache_dir, exist_ok=True)
+        Path(self.audio_mel_cache_dir).mkdir(parents=True, exist_ok=True)
 
     def __len__(self):
         return len(self.video_paths)
@@ -83,17 +85,9 @@ class UNetDataset(Dataset):
         return gt_frames, ref_frames, start_idx
 
     def worker_init_fn(self, worker_id):
-        # Initialize the face mesh object in each worker process,
-        # because the face mesh object cannot be called in subprocesses
         self.worker_id = worker_id
-        setattr(
-            self,
-            f"image_processor_{worker_id}",
-            ImageProcessor(self.resolution, mask_image=self.mask_image),
-        )
 
     def __getitem__(self, idx):
-        image_processor: ImageProcessor = getattr(self, f"image_processor_{self.worker_id}")
         while True:
             try:
                 idx = random.randint(0, len(self) - 1)
@@ -132,10 +126,10 @@ class UNetDataset(Dataset):
                 else:
                     mel = []
 
-                gt_pixel_values, masked_pixel_values, masks = image_processor.prepare_masks_and_masked_images(
+                gt_pixel_values, masked_pixel_values, masks = self.image_processor.prepare_masks_and_masked_images(
                     gt_frames, affine_transform=False
                 )  # (f, c, h, w)
-                ref_pixel_values = image_processor.process_images(ref_frames)
+                ref_pixel_values = self.image_processor.process_images(ref_frames)
 
                 vr.seek(0)  # avoid memory leak
                 break

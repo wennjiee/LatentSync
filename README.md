@@ -134,7 +134,7 @@ The complete data processing pipeline includes the following steps:
 2. Resample the video FPS to 25, and resample the audio to 16000 Hz.
 3. Scene detect via [PySceneDetect](https://github.com/Breakthrough/PySceneDetect).
 4. Split each video into 5-10 second segments.
-5. Affine transform the faces according to the landmarks detected by [face-alignment](https://github.com/1adrianb/face-alignment), then resize to 256 $\times$ 256.
+5. Affine transform the faces according to the landmarks detected by [InsightFace](https://github.com/deepinsight/insightface), then resize to 256 $\times$ 256.
 6. Remove videos with [sync confidence score](https://www.robots.ox.ac.uk/~vgg/publications/2016/Chung16a/chung16a.pdf) lower than 3, and adjust the audio-visual offset to 0.
 7. Calculate [hyperIQA](https://openaccess.thecvf.com/content_CVPR_2020/papers/Su_Blindly_Assess_Image_Quality_in_the_Wild_Guided_by_a_CVPR_2020_paper.pdf) score, and remove videos with scores lower than 40.
 
@@ -203,7 +203,7 @@ Note that our released SyncNet is trained on data processed through our data pro
 - Our code is built on [AnimateDiff](https://github.com/guoyww/AnimateDiff). 
 - Some code are borrowed from [MuseTalk](https://github.com/TMElyralab/MuseTalk), [StyleSync](https://github.com/guanjz20/StyleSync), [SyncNet](https://github.com/joonson/syncnet_python), [Wav2Lip](https://github.com/Rudrabha/Wav2Lip).
 
-Thanks for their generous contributions to the open-source community.
+Thanks for their generous contributions to the open-source community!
 
 ## 📖 Citation
 

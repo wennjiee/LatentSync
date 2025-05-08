@@ -26,8 +26,6 @@ class Chart:
         train_loss_list = ckpt["train_loss_list"]
         val_step_list = ckpt["val_step_list"]
         val_loss_list = ckpt["val_loss_list"]
-        val_step_list = [val_step_list[0]] + val_step_list[4::5]
-        val_loss_list = [val_loss_list[0]] + val_loss_list[4::5]
         self.loss_list.append((line_name, train_step_list, train_loss_list, val_step_list, val_loss_list))
 
     def draw(self, save_path, plot_val=True):
@@ -38,7 +36,7 @@ class Chart:
         plt.rcParams["font.serif"] = ["Times New Roman", "DejaVu Serif"]
 
         # Creating the plot
-        plt.figure(figsize=(7.766, 4.8)) # Golden ratio
+        plt.figure(figsize=(7.766, 4.8))  # Golden ratio
         for loss in self.loss_list:
             if plot_val:
                 (line,) = plt.plot(loss[1], loss[2], label=loss[0], linewidth=0.5, alpha=0.5)
@@ -61,8 +59,6 @@ class Chart:
 
 if __name__ == "__main__":
     chart = Chart()
-    # chart.add_ckpt("output/syncnet/train-2024_10_25-18:14:43/checkpoints/checkpoint-10000.pt", "w/ self-attn")
-    # chart.add_ckpt("output/syncnet/train-2024_10_25-18:21:59/checkpoints/checkpoint-10000.pt", "w/o self-attn")
     chart.add_ckpt("output/syncnet/train-2024_10_28-23:16:40/checkpoints/checkpoint-20000.pt", "Wav2Lip SyncNet")
     chart.add_ckpt("output/syncnet/train-2024_10_29-20:13:43/checkpoints/checkpoint-20000.pt", "StableSyncNet")
     chart.draw("ablation.pdf", plot_val=True)

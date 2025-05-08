@@ -2,7 +2,7 @@ from insightface.app import FaceAnalysis
 import numpy as np
 import torch
 
-INSIGHTFACE_DETECT_SIZE = 640
+INSIGHTFACE_DETECT_SIZE = 512
 
 
 class FaceDetector:

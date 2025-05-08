@@ -8,7 +8,7 @@ import kornia
 
 
 class AlignRestore(object):
-    def __init__(self, align_points=3, resolution=256, device="cpu", dtype=torch.float32):
+    def __init__(self, align_points=3, resolution=256, device="cpu", dtype=torch.float16):
         if align_points == 3:
             self.upscale_factor = 1
             ratio = resolution / 256 * 2.8
@@ -22,50 +22,42 @@ class AlignRestore(object):
             self.fill_value = torch.tensor([127, 127, 127], device=device, dtype=dtype)
             self.mask = torch.ones((1, 1, self.face_size[1], self.face_size[0]), device=device, dtype=dtype)
 
-    def align_warp_face(self, img, lmks3, smooth=True):
-        affine_matrix, self.p_bias = self.transformation_from_points(lmks3, self.face_template, smooth, self.p_bias)
+    def align_warp_face(self, img, landmarks3, smooth=True):
+        affine_matrix, self.p_bias = self.transformation_from_points(
+            landmarks3, self.face_template, smooth, self.p_bias
+        )
 
-        img_tensor = rearrange(
-            torch.from_numpy(img).to(device=self.device, dtype=self.dtype), "h w c -> c h w"
-        ).unsqueeze(0)
-        affine_matrix_tensor = torch.from_numpy(affine_matrix).to(device=self.device, dtype=self.dtype).unsqueeze(0)
+        img = rearrange(torch.from_numpy(img).to(device=self.device, dtype=self.dtype), "h w c -> c h w").unsqueeze(0)
+        affine_matrix = torch.from_numpy(affine_matrix).to(device=self.device, dtype=self.dtype).unsqueeze(0)
 
-        crop_tensor = kornia.geometry.transform.warp_affine(
-            img_tensor,
-            affine_matrix_tensor,
+        cropped_face = kornia.geometry.transform.warp_affine(
+            img,
+            affine_matrix,
             (self.face_size[1], self.face_size[0]),
             mode="bilinear",
             padding_mode="fill",
             fill_value=self.fill_value,
         )
-        cropped_face = rearrange(crop_tensor.squeeze(0), "c h w -> h w c").cpu().numpy().astype(np.uint8)
+        cropped_face = rearrange(cropped_face.squeeze(0), "c h w -> h w c").cpu().numpy().astype(np.uint8)
         return cropped_face, affine_matrix
 
-    def restore_img(self, input_img, face, torch_affine_matrix):
+    def restore_img(self, input_img, face, affine_matrix):
         h, w, _ = input_img.shape
 
-        if isinstance(torch_affine_matrix, np.ndarray):
-            torch_affine_matrix = (
-                torch.from_numpy(torch_affine_matrix).to(device=self.device, dtype=self.dtype).unsqueeze(0)
-            )
+        if isinstance(affine_matrix, np.ndarray):
+            affine_matrix = torch.from_numpy(affine_matrix).to(device=self.device, dtype=self.dtype).unsqueeze(0)
 
-        torch_inverse_affine = kornia.geometry.transform.invert_affine_transform(torch_affine_matrix)
-        face_tensor = rearrange(torch.from_numpy(face).to(device=self.device, dtype=self.dtype), "h w c -> c h w")
+        inv_affine_matrix = kornia.geometry.transform.invert_affine_transform(affine_matrix)
+        face = face.to(dtype=self.dtype).unsqueeze(0)
 
-        inv_restored = kornia.geometry.transform.warp_affine(
-            face_tensor.unsqueeze(0),
-            torch_inverse_affine,
-            (h, w),
-            mode="bilinear",
-            padding_mode="fill",
-            fill_value=self.fill_value,
+        inv_face = kornia.geometry.transform.warp_affine(
+            face, inv_affine_matrix, (h, w), mode="bilinear", padding_mode="fill", fill_value=self.fill_value
         ).squeeze(0)
+        inv_face = (inv_face / 2 + 0.5).clamp(0, 1) * 255
 
-        input_tensor = rearrange(
-            torch.from_numpy(input_img).to(device=self.device, dtype=self.dtype), "h w c -> c h w"
-        )
+        input_img = rearrange(torch.from_numpy(input_img).to(device=self.device, dtype=self.dtype), "h w c -> c h w")
         inv_mask = kornia.geometry.transform.warp_affine(
-            self.mask, torch_inverse_affine, (h, w), padding_mode="zeros"
+            self.mask, inv_affine_matrix, (h, w), padding_mode="zeros"
         )  # (1, 1, h_up, w_up)
 
         inv_mask_erosion = kornia.morphology.erosion(
@@ -75,8 +67,8 @@ class AlignRestore(object):
             ),
         )
 
-        inv_mask_erosion_t = inv_mask_erosion.squeeze(0).expand_as(inv_restored)
-        pasted_face = inv_mask_erosion_t * inv_restored
+        inv_mask_erosion_t = inv_mask_erosion.squeeze(0).expand_as(inv_face)
+        pasted_face = inv_mask_erosion_t * inv_face
         total_face_area = torch.sum(inv_mask_erosion.float())
         w_edge = int(total_face_area**0.5) // 20
         erosion_radius = w_edge * 2
@@ -96,11 +88,11 @@ class AlignRestore(object):
         inv_soft_mask = kornia.filters.gaussian_blur2d(
             inv_mask_center, (blur_size, blur_size), (sigma, sigma)
         ).squeeze(0)
-        inv_soft_mask_3d = inv_soft_mask.expand_as(inv_restored)
-        tensor_img_back = inv_soft_mask_3d * pasted_face + (1 - inv_soft_mask_3d) * input_tensor
+        inv_soft_mask_3d = inv_soft_mask.expand_as(inv_face)
+        img_back = inv_soft_mask_3d * pasted_face + (1 - inv_soft_mask_3d) * input_img
 
-        tensor_img_back = rearrange(tensor_img_back, "c h w -> h w c").contiguous().to(dtype=torch.uint8)
-        img_back = tensor_img_back.cpu().numpy()
+        img_back = rearrange(img_back, "c h w -> h w c").contiguous().to(dtype=torch.uint8)
+        img_back = img_back.cpu().numpy()
         return img_back
 
     def transformation_from_points(self, points1: torch.Tensor, points0: torch.Tensor, smooth=True, p_bias=None):

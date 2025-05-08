@@ -4,6 +4,7 @@ from .whisper import load_model
 import numpy as np
 import torch
 import os
+from pathlib import Path
 
 
 class Audio2Feature:
@@ -17,6 +18,8 @@ class Audio2Feature:
     ):
         self.model = load_model(model_path, device)
         self.audio_embeds_cache_dir = audio_embeds_cache_dir
+        if audio_embeds_cache_dir is not None and audio_embeds_cache_dir != "":
+            Path(audio_embeds_cache_dir).mkdir(parents=True, exist_ok=True)
         self.num_frames = num_frames
         self.embedding_dim = self.model.dims.n_audio_state
         self.audio_feat_length = audio_feat_length

@@ -61,20 +61,10 @@ class ImageProcessor:
         pt_left_eye = np.mean(landmark_2d_106[[43, 48, 49, 51, 50]], axis=0)  # left eyebrow center
         pt_right_eye = np.mean(landmark_2d_106[101:106], axis=0)  # right eyebrow center
         pt_nose = np.mean(landmark_2d_106[[74, 77, 83, 86]], axis=0)  # nose center
-        # pt_nose = np.mean(landmark_2d_106[[72, 73, 74, 76, 77, 78, 79, 80, 82, 83, 84, 85, 86]], axis=0)  # nose center
 
-        landmarks = [
-            np.round(pt_left_eye),
-            np.round(pt_right_eye),
-            np.round(pt_nose),
-        ]
+        landmarks3 = np.round([pt_left_eye, pt_right_eye, pt_nose])
 
-        lmk3_ = np.zeros((3, 2))
-        lmk3_[0] = landmarks[0]  # left eyebrow center
-        lmk3_[1] = landmarks[1]  # right eyebrow center
-        lmk3_[2] = landmarks[2]  # nose center
-
-        face, affine_matrix = self.restorer.align_warp_face(image.copy(), lmks3=lmk3_, smooth=True)
+        face, affine_matrix = self.restorer.align_warp_face(image.copy(), landmarks3=landmarks3, smooth=True)
         box = [0, 0, face.shape[1], face.shape[0]]  # x1, y1, x2, y2
         face = cv2.resize(face, (self.resolution, self.resolution), interpolation=cv2.INTER_LANCZOS4)
         face = rearrange(torch.from_numpy(face), "h w c -> c h w")

@@ -21,6 +21,7 @@ from ..utils.util import gather_video_paths_recursively
 from ..utils.image_processor import ImageProcessor
 from ..utils.audio import melspectrogram
 import math
+from pathlib import Path
 
 from decord import AudioReader, VideoReader, cpu
 
@@ -44,7 +45,7 @@ class SyncNetDataset(Dataset):
         self.video_fps = config.data.video_fps
         self.image_processor = ImageProcessor(resolution=config.data.resolution)
         self.audio_mel_cache_dir = config.data.audio_mel_cache_dir
-        os.makedirs(self.audio_mel_cache_dir, exist_ok=True)
+        Path(self.audio_mel_cache_dir).mkdir(parents=True, exist_ok=True)
 
     def __len__(self):
         return len(self.video_paths)
@@ -78,13 +79,9 @@ class SyncNetDataset(Dataset):
         return frames, wrong_frames, start_idx
 
     def worker_init_fn(self, worker_id):
-        # Initialize the face mesh object in each worker process,
-        # because the face mesh object cannot be called in subprocesses
         self.worker_id = worker_id
-        # setattr(self, f"image_processor_{worker_id}", ImageProcessor(self.resolution, self.mask))
 
     def __getitem__(self, idx):
-        # image_processor = getattr(self, f"image_processor_{self.worker_id}")
         while True:
             try:
                 idx = random.randint(0, len(self) - 1)

@@ -162,7 +162,7 @@ class AttentionBlock2D(nn.Module):
         hidden_states = self.attn(norm_hidden_states, attention_mask=None) + hidden_states
         hidden_states = self.ff(self.norm3(hidden_states)) + hidden_states
 
-        hidden_states = rearrange(hidden_states, "b (h w) c -> b c h w", h=height, w=width)
+        hidden_states = rearrange(hidden_states, "b (h w) c -> b c h w", h=height, w=width).contiguous()
         hidden_states = self.conv_out(hidden_states)
 
         hidden_states = hidden_states + residual
