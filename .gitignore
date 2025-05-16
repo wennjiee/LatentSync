@@ -41,6 +41,7 @@ trt_engines/
 *.jpeg
 *.csv
 *.pdf
+*.pkl
 
 # log files
 *.log
