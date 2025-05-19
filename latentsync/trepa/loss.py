@@ -36,8 +36,8 @@ class TREPALoss:
         videos_fake = rearrange(videos_fake.clone(), "b c f h w -> (b f) c h w")
         videos_real = rearrange(videos_real.clone(), "b c f h w -> (b f) c h w")
 
-        videos_fake = F.interpolate(videos_fake, size=(224, 224), mode="bilinear")
-        videos_real = F.interpolate(videos_real, size=(224, 224), mode="bilinear")
+        videos_fake = F.interpolate(videos_fake, size=(224, 224), mode="bicubic")
+        videos_real = F.interpolate(videos_real, size=(224, 224), mode="bicubic")
 
         videos_fake = rearrange(videos_fake, "(b f) c h w -> b c f h w", f=num_frames)
         videos_real = rearrange(videos_real, "(b f) c h w -> b c f h w", f=num_frames)
