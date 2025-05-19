@@ -40,8 +40,8 @@ trt_engines/
 *.jpg
 *.jpeg
 *.csv
-*.zip
-*.whl
+*.pdf
+*.pkl
 
 # log files
 *.log
@@ -51,3 +51,4 @@ trt_engines/
 !/assets/*
 !/docs/*
 !/internal/*.png
+.cog/

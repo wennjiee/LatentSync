@@ -473,7 +473,6 @@ def main(config):
                         weight_dtype=torch.float16,
                         width=config.data.resolution,
                         height=config.data.resolution,
-                        mask=config.data.mask,
                         mask_image_path=config.data.mask_image_path,
                     )
 
