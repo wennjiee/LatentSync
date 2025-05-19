@@ -288,31 +288,7 @@ class LipsyncPipeline(DiffusionPipeline):
             out_frame = self.image_processor.restorer.restore_img(video_frames[index], face, affine_matrices[index])
             out_frames.append(out_frame)
         return np.stack(out_frames, axis=0)
-    
-    def restore_video2imgs(self, faces: torch.Tensor, video_frames: np.ndarray, boxes: list, affine_matrices: list, video_frames_dir: str):
-        video_frames = video_frames[: len(faces)]
-        out_frames = []
-        print(f"Restoring {len(faces)} faces...")
-        for index, face in enumerate(tqdm.tqdm(faces)):
-            x1, y1, x2, y2 = boxes[index]
-            height = int(y2 - y1)
-            width = int(x2 - x1)
-            face = torchvision.transforms.functional.resize(face, size=(height, width), antialias=True)
-            face = rearrange(face, "c h w -> h w c")
-            face = (face / 2 + 0.5).clamp(0, 1)
-            face = (face * 255).to(torch.uint8).cpu().numpy()
-            # face = cv2.resize(face, (width, height), interpolation=cv2.INTER_LANCZOS4)
-            out_frame = self.image_processor.restorer.restore_img(video_frames[index], face, affine_matrices[index])
-            out_frames.append(out_frame)
         
-        print('Write frames into folder')
-        output_dir = video_frames_dir
-        os.makedirs(output_dir, exist_ok=True)
-        for index, out_frame in enumerate(tqdm.tqdm(out_frames)):
-            frame_filename = os.path.join(output_dir, f"frame_{index:05d}.png")
-            cv2.imwrite(frame_filename, out_frame)
-        return
-    
     def loop_video(self, whisper_chunks: list, video_frames: np.ndarray):
         # If the audio is longer than the video, we need to loop the video
         if len(whisper_chunks) > len(video_frames):
