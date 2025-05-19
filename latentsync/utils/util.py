@@ -279,3 +279,11 @@ def check_model_and_download(ckpt_path: str, huggingface_model_id: str = "ByteDa
         ckpt_path_obj = Path(ckpt_path)
         download_cmd = f"huggingface-cli download {huggingface_model_id} {Path(*ckpt_path_obj.parts[1:])} --local-dir {Path(ckpt_path_obj.parts[0])}"
         subprocess.run(download_cmd, shell=True)
+
+
+class dummy_context:
+    def __enter__(self):
+        pass
+
+    def __exit__(self, *args):
+        pass

@@ -21,6 +21,7 @@ data:
   train_output_dir: debug/syncnet
   num_val_samples: 1200
   batch_size: 120 # 40
+  gradient_accumulation_steps: 1
   num_workers: 12 # 12
   latent_space: true
   num_frames: 16
