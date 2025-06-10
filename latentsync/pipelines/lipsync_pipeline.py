@@ -320,11 +320,8 @@ class LipsyncPipeline(DiffusionPipeline):
         return video_frames, faces, boxes, affine_matrices
 
     def get_wav_duration(self, wav_path):
-        with contextlib.closing(wave.open(wav_path, 'r')) as wf:
-            frames = wf.getnframes()
-            rate = wf.getframerate()
-            duration = frames / float(rate)
-        return duration
+        with sf.SoundFile(wav_path) as f:
+            return len(f) / f.samplerate
     
     @torch.no_grad()
     def __call__(
