@@ -123,7 +123,7 @@ def main(config):
         audio_feat_length=config.data.audio_feat_length,
     )
 
-    denoising_unet, resume_global_step = UNet3DConditionModel.from_pretrained(
+    unet, resume_global_step = UNet3DConditionModel.from_pretrained(
         OmegaConf.to_container(config.model),
         config.ckpt.resume_ckpt_path,
         device=device,
@@ -146,16 +146,16 @@ def main(config):
         torch.cuda.empty_cache()
 
     if config.model.use_motion_module:
-        denoising_unet.requires_grad_(False)
-        for name, param in denoising_unet.named_parameters():
+        unet.requires_grad_(False)
+        for name, param in unet.named_parameters():
             for trainable_module_name in config.run.trainable_modules:
                 if trainable_module_name in name:
                     param.requires_grad = True
                     break
-        trainable_params = list(filter(lambda p: p.requires_grad, denoising_unet.parameters()))
+        trainable_params = list(filter(lambda p: p.requires_grad, unet.parameters()))
     else:
-        denoising_unet.requires_grad_(True)
-        trainable_params = list(denoising_unet.parameters())
+        unet.requires_grad_(True)
+        trainable_params = list(unet.parameters())
 
     if config.optimizer.scale_lr:
         config.optimizer.lr = config.optimizer.lr * num_processes
@@ -168,7 +168,7 @@ def main(config):
 
     # Enable gradient checkpointing
     if config.run.enable_gradient_checkpointing:
-        denoising_unet.enable_gradient_checkpointing()
+        unet.enable_gradient_checkpointing()
 
     # Get the training dataset
     train_dataset = UNetDataset(config.data.train_data_dir, config)
@@ -215,13 +215,13 @@ def main(config):
     pipeline = LipsyncPipeline(
         vae=vae,
         audio_encoder=audio_encoder,
-        denoising_unet=denoising_unet,
+        unet=unet,
         scheduler=noise_scheduler,
     ).to(device)
     pipeline.set_progress_bar_config(disable=True)
 
     # DDP warpper
-    denoising_unet = DDP(denoising_unet, device_ids=[local_rank], output_device=local_rank)
+    unet = DDP(unet, device_ids=[local_rank], output_device=local_rank)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader))
@@ -258,7 +258,7 @@ def main(config):
 
     for epoch in range(first_epoch, num_train_epochs):
         train_dataloader.sampler.set_epoch(epoch)
-        denoising_unet.train()
+        unet.train()
 
         for step, batch in enumerate(train_dataloader):
             ### >>>> Training >>>> ###
@@ -349,12 +349,12 @@ def main(config):
             else:
                 raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-            denoising_unet_input = torch.cat([noisy_gt_latents, masks, masked_latents, ref_latents], dim=1)
+            unet_input = torch.cat([noisy_gt_latents, masks, masked_latents, ref_latents], dim=1)
 
             # Predict the noise and compute loss
             # Mixed-precision training
             with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=config.run.mixed_precision_training):
-                pred_noise = denoising_unet(denoising_unet_input, timesteps, encoder_hidden_states=audio_embeds).sample
+                pred_noise = unet(unet_input, timesteps, encoder_hidden_states=audio_embeds).sample
 
             if config.run.recon_loss_weight != 0:
                 recon_loss = F.mse_loss(pred_noise.float(), target.float(), reduction="mean")
@@ -391,6 +391,12 @@ def main(config):
 
             if config.model.add_audio_layer and config.run.use_syncnet:
                 if config.run.pixel_space_supervise:
+                    if config.data.resolution != syncnet_config.data.resolution:
+                        pred_pixel_values = F.interpolate(
+                            pred_pixel_values,
+                            size=(syncnet_config.data.resolution, syncnet_config.data.resolution),
+                            mode="bicubic",
+                        )
                     syncnet_input = rearrange(
                         pred_pixel_values, "(b f) c h w -> b (f c) h w", f=config.data.num_frames
                     )
@@ -434,7 +440,7 @@ def main(config):
                 optimizer.step()
 
             # Check the grad of attn blocks for debugging
-            # print(denoising_unet.module.up_blocks[3].attentions[2].transformer_blocks[0].attn2.to_q.weight.grad)
+            # print(unet.module.up_blocks[3].attentions[2].transformer_blocks[0].attn2.to_q.weight.grad)
 
             lr_scheduler.step()
             progress_bar.update(1)
@@ -447,7 +453,7 @@ def main(config):
                 model_save_path = os.path.join(output_dir, f"checkpoints/checkpoint-{global_step}.pt")
                 state_dict = {
                     "global_step": global_step,
-                    "state_dict": denoising_unet.module.state_dict(),
+                    "state_dict": unet.module.state_dict(),
                 }
                 try:
                     torch.save(state_dict, model_save_path)
@@ -459,14 +465,12 @@ def main(config):
                 logger.info("Running validation... ")
 
                 validation_video_out_path = os.path.join(output_dir, f"val_videos/val_video_{global_step}.mp4")
-                validation_video_mask_path = os.path.join(output_dir, f"val_videos/val_video_mask.mp4")
 
                 with torch.autocast(device_type="cuda", dtype=torch.float16):
                     pipeline(
                         config.data.val_video_path,
                         config.data.val_audio_path,
                         validation_video_out_path,
-                        validation_video_mask_path,
                         num_frames=config.data.num_frames,
                         num_inference_steps=config.run.inference_steps,
                         guidance_scale=config.run.guidance_scale,

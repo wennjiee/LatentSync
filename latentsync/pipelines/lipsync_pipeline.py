@@ -51,7 +51,7 @@ class LipsyncPipeline(DiffusionPipeline):
         self,
         vae: AutoencoderKL,
         audio_encoder: Audio2Feature,
-        denoising_unet: UNet3DConditionModel,
+        unet: UNet3DConditionModel,
         scheduler: Union[
             DDIMScheduler,
             PNDMScheduler,
@@ -90,12 +90,10 @@ class LipsyncPipeline(DiffusionPipeline):
             new_config["clip_sample"] = False
             scheduler._internal_dict = FrozenDict(new_config)
 
-        is_unet_version_less_0_9_0 = hasattr(denoising_unet.config, "_diffusers_version") and version.parse(
-            version.parse(denoising_unet.config._diffusers_version).base_version
+        is_unet_version_less_0_9_0 = hasattr(unet.config, "_diffusers_version") and version.parse(
+            version.parse(unet.config._diffusers_version).base_version
         ) < version.parse("0.9.0.dev0")
-        is_unet_sample_size_less_64 = (
-            hasattr(denoising_unet.config, "sample_size") and denoising_unet.config.sample_size < 64
-        )
+        is_unet_sample_size_less_64 = hasattr(unet.config, "sample_size") and unet.config.sample_size < 64
         if is_unet_version_less_0_9_0 and is_unet_sample_size_less_64:
             deprecation_message = (
                 "The configuration file of the unet has set the default `sample_size` to smaller than"
@@ -109,14 +107,14 @@ class LipsyncPipeline(DiffusionPipeline):
                 " the `unet/config.json` file"
             )
             deprecate("sample_size<64", "1.0.0", deprecation_message, standard_warn=False)
-            new_config = dict(denoising_unet.config)
+            new_config = dict(unet.config)
             new_config["sample_size"] = 64
-            denoising_unet._internal_dict = FrozenDict(new_config)
+            unet._internal_dict = FrozenDict(new_config)
 
         self.register_modules(
             vae=vae,
             audio_encoder=audio_encoder,
-            denoising_unet=denoising_unet,
+            unet=unet,
             scheduler=scheduler,
         )
 
@@ -132,9 +130,9 @@ class LipsyncPipeline(DiffusionPipeline):
 
     @property
     def _execution_device(self):
-        if self.device != torch.device("meta") or not hasattr(self.denoising_unet, "_hf_hook"):
+        if self.device != torch.device("meta") or not hasattr(self.unet, "_hf_hook"):
             return self.device
-        for module in self.denoising_unet.modules():
+        for module in self.unet.modules():
             if (
                 hasattr(module, "_hf_hook")
                 and hasattr(module._hf_hook, "execution_device")
@@ -180,14 +178,14 @@ class LipsyncPipeline(DiffusionPipeline):
                 f" {type(callback_steps)}."
             )
 
-    def prepare_latents(self, batch_size, num_frames, num_channels_latents, height, width, dtype, device, generator):
+    def prepare_latents(self, num_frames, num_channels_latents, height, width, dtype, device, generator):
         shape = (
-            batch_size,
+            1,
             num_channels_latents,
             1,
             height // self.vae_scale_factor,
             width // self.vae_scale_factor,
-        )
+        )  # (b, c, f, h, w)
         rand_device = "cpu" if device.type == "mps" else device
         latents = torch.randn(shape, generator=generator, device=rand_device, dtype=dtype).to(device)
         latents = latents.repeat(1, 1, num_frames, 1, 1)
@@ -330,7 +328,6 @@ class LipsyncPipeline(DiffusionPipeline):
         video_path: str,
         audio_path: str,
         video_out_path: str,
-        video_mask_path: str = None,
         num_frames: int = 16,
         video_fps: int = 25,
         audio_sample_rate: int = 16000,
@@ -341,26 +338,26 @@ class LipsyncPipeline(DiffusionPipeline):
         weight_dtype: Optional[torch.dtype] = torch.float16,
         eta: float = 0.0,
         mask_image_path: str = "latentsync/utils/mask.png",
+        temp_dir: str = "temp",
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: Optional[int] = 1,
         **kwargs,
     ):
-        is_train = self.denoising_unet.training
-        self.denoising_unet.eval()
+        is_train = self.unet.training
+        self.unet.eval()
 
         check_ffmpeg_installed()
 
         # 0. Define call parameters
-        batch_size = 1
         device = self._execution_device
         mask_image = load_fixed_mask(height, mask_image_path)
         self.image_processor = ImageProcessor(height, device="cuda", mask_image=mask_image)
         self.set_progress_bar_config(position=2, desc=f"Sample frames: {num_frames}")
 
         # 1. Default height and width to unet
-        height = height or self.denoising_unet.config.sample_size * self.vae_scale_factor
-        width = width or self.denoising_unet.config.sample_size * self.vae_scale_factor
+        height = height or self.unet.config.sample_size * self.vae_scale_factor
+        width = width or self.unet.config.sample_size * self.vae_scale_factor
 
         # 2. Check inputs
         self.check_inputs(height, width, callback_steps)
@@ -417,7 +414,6 @@ class LipsyncPipeline(DiffusionPipeline):
 
             # Prepare latent variables
             all_latents = self.prepare_latents(
-                batch_size,
                 len(current_chunks),
                 num_channels_latents,
                 height,
@@ -432,7 +428,7 @@ class LipsyncPipeline(DiffusionPipeline):
             synced_video_frames = []
             cnt = 0
             for i in tqdm.tqdm(range(num_inferences), position=1, desc="Doing inference..."):
-                if self.denoising_unet.add_audio_layer:
+                if self.unet.add_audio_layer:
                     audio_embeds = torch.stack(current_chunks[i * num_frames : (i + 1) * num_frames])
                     audio_embeds = audio_embeds.to(device, dtype=weight_dtype)
                     if do_classifier_free_guidance:
@@ -472,18 +468,18 @@ class LipsyncPipeline(DiffusionPipeline):
                 with self.progress_bar(total=num_inference_steps) as progress_bar:
                     for j, t in enumerate(timesteps):
                         # expand the latents if we are doing classifier free guidance
-                        denoising_unet_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+                        unet_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
 
-                        denoising_unet_input = self.scheduler.scale_model_input(denoising_unet_input, t)
+                        unet_input = self.scheduler.scale_model_input(unet_input, t)
 
                         # concat latents, mask, masked_image_latents in the channel dimension
-                        denoising_unet_input = torch.cat(
-                            [denoising_unet_input, mask_latents, masked_image_latents, ref_latents], dim=1
+                        unet_input = torch.cat(
+                            [unet_input, mask_latents, masked_image_latents, ref_latents], dim=1
                         )
 
                         # predict the noise residual
-                        noise_pred = self.denoising_unet(
-                            denoising_unet_input, t, encoder_hidden_states=audio_embeds
+                        noise_pred = self.unet(
+                            unet_input, t, encoder_hidden_states=audio_embeds
                         ).sample
 
                         # perform guidance
@@ -512,7 +508,7 @@ class LipsyncPipeline(DiffusionPipeline):
                     synced_video_frames = self.restore_video(torch.cat(synced_video_frames), video_frames, boxes, affine_matrices, num_frames*cnt*LOOP_COEFF, LOOP_COEFF)
 
                     if is_train:
-                        self.denoising_unet.train()
+                        self.unet.train()
 
                     temp_video_path =  os.path.abspath(os.path.join(temp_dir, f"temp_{temp_video_index}.mp4"))
                     temp_videos.append(temp_video_path)

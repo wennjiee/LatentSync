@@ -3,13 +3,15 @@
 <div align="center">
 
 [![arXiv](https://img.shields.io/badge/arXiv-Paper-b31b1b.svg?logo=arXiv)](https://arxiv.org/abs/2412.09262)
-[![arXiv](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow)](https://huggingface.co/ByteDance/LatentSync-1.5)
+[![arXiv](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Model-yellow)](https://huggingface.co/ByteDance/LatentSync-1.6)
 [![arXiv](https://img.shields.io/badge/%F0%9F%A4%97%20HuggingFace-Space-yellow)](https://huggingface.co/spaces/fffiloni/LatentSync)
 <a href="https://replicate.com/lucataco/latentsync"><img src="https://replicate.com/lucataco/latentsync/badge" alt="Replicate"></a>
 
 </div>
 
 ## 🔥 Updates
+
+- `2025/06/11`: We released **LatentSync 1.6**, which is trained on 512 $\times$ 512 resolution videos to mitigate the blurriness problem. Watch the demo [here](docs/changelog_v1.6.md).
 
 - `2025/03/14`: We released **LatentSync 1.5**, which **(1)** improves temporal consistency via adding temporal layer, **(2)** improves performance on Chinese videos and **(3)** reduces the VRAM requirement of the stage2 training to **20 GB** through a series of optimizations. Learn more details [here](docs/changelog_v1.5.md).
 
@@ -34,47 +36,47 @@ LatentSync uses the [Whisper](https://github.com/openai/whisper) to convert mels
   </tr>
   <tr>
     <td>
-      <video src=https://github.com/user-attachments/assets/ff3a84da-dc9b-498a-950f-5c54f58dd5c5 controls preload></video>
+      <video src=https://github.com/user-attachments/assets/b778e3c3-ba25-455d-bdf3-d89db0aa75f4 controls preload></video>
     </td>
     <td>
-      <video src=https://github.com/user-attachments/assets/150e00fd-381e-4421-a478-a9ea3d1212a8 controls preload></video>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <video src=https://github.com/user-attachments/assets/32c830a9-4d7d-4044-9b33-b184d8e11010 controls preload></video>
-    </td>
-    <td>
-      <video src=https://github.com/user-attachments/assets/84e4fe9d-b108-44a4-8712-13a012348145 controls preload></video>
+      <video src=https://github.com/user-attachments/assets/ac791682-1541-4e6a-aa11-edd9427b977e controls preload></video>
     </td>
   </tr>
   <tr>
     <td>
-      <video src=https://github.com/user-attachments/assets/7510a448-255a-44ee-b093-a1b98bd3961d controls preload></video>
+      <video src=https://github.com/user-attachments/assets/6d4f4afd-6547-428d-8484-09dc53a19ecf controls preload></video>
     </td>
     <td>
-      <video src=https://github.com/user-attachments/assets/6150c453-c559-4ae0-bb00-c565f135ff41 controls preload></video>
+      <video src=https://github.com/user-attachments/assets/b4723d08-c1d4-4237-8251-09c43eb77a6a controls preload></video>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <video src=https://github.com/user-attachments/assets/fb4dc4c1-cc98-43dd-a211-1ff8f843fcfa controls preload></video>
+    </td>
+    <td>
+      <video src=https://github.com/user-attachments/assets/7c6ca513-d068-4aa9-8a82-4dfd9063ac4e controls preload></video>
     </td>
   </tr>
   <tr>
     <td width=300px>
+      <video src=https://github.com/user-attachments/assets/0756acef-2f43-4b66-90ba-6dc1d1216904 controls preload></video>
+    </td>
+    <td width=300px>
+      <video src=https://github.com/user-attachments/assets/663ff13d-d716-4a35-8faa-9dcfe955e6a5 controls preload></video>
+    </td>
+  </tr>
+  <tr>
+    <td>
       <video src=https://github.com/user-attachments/assets/0f7f9845-68b2-4165-bd08-c7bbe01a0e52 controls preload></video>
     </td>
-    <td width=300px>
+    <td>
       <video src=https://github.com/user-attachments/assets/c34fe89d-0c09-4de3-8601-3d01229a69e3 controls preload></video>
-    </td>
-  </tr>
-  <tr>
-    <td>
-      <video src=https://github.com/user-attachments/assets/7ce04d50-d39f-4154-932a-ec3a590a8f64 controls preload></video>
-    </td>
-    <td>
-      <video src=https://github.com/user-attachments/assets/70bde520-42fa-4a0e-b66c-d3040ae5e065 controls preload></video>
     </td>
   </tr>
 </table>
 
-(Photorealistic videos are filmed by contracted models, and anime videos are from [VASA-1](https://www.microsoft.com/en-us/research/project/vasa-1/) and [EMO](https://humanaigc.github.io/emote-portrait-alive/))
+(Photorealistic videos are filmed by contracted models, and anime videos are from [VASA-1](https://www.microsoft.com/en-us/research/project/vasa-1/))
 
 ## 📑 Open-source Plan
 
@@ -99,11 +101,16 @@ If the download is successful, the checkpoints should appear as follows:
 |   `-- tiny.pt
 ```
 
-Or you can download `latentsync_unet.pt` and `tiny.pt` manually from our [HuggingFace repo](https://huggingface.co/ByteDance/LatentSync-1.5)
+Or you can download `latentsync_unet.pt` and `tiny.pt` manually from our [HuggingFace repo](https://huggingface.co/ByteDance/LatentSync-1.6)
 
 ## 🚀 Inference
 
-There are two ways to perform inference, and both require **7.8 GB** of VRAM.
+Minimum VRAM for inference:
+
+- **8 GB** with LatentSync 1.5
+- **18 GB** with LatentSync 1.6
+
+There are two ways to perform inference:
 
 ### 1. Gradio App
 
@@ -151,7 +158,7 @@ You should change the parameter `input_dir` in the script to specify the data di
 Before training, you should process the data as described above. We released a pretrained SyncNet with 94% accuracy on both VoxCeleb2 and HDTF datasets for the supervision of U-Net training. You can execute the following command to download this SyncNet checkpoint:
 
 ```bash
-huggingface-cli download ByteDance/LatentSync-1.5 stable_syncnet.pt --local-dir checkpoints
+huggingface-cli download ByteDance/LatentSync-1.6 stable_syncnet.pt --local-dir checkpoints
 ```
 
 If all the preparations are complete, you can train the U-Net with the following script:
@@ -160,11 +167,13 @@ If all the preparations are complete, you can train the U-Net with the following
 ./train_unet.sh
 ```
 
-We prepared three UNet configuration files in the ``configs/unet`` directory, each corresponding to a different training setup:
+We prepared several UNet configuration files in the ``configs/unet`` directory, each corresponding to a specific training setup:
 
 - `stage1.yaml`: Stage1 training, requires **23 GB** VRAM.
 - `stage2.yaml`: Stage2 training with optimal performance, requires **30 GB** VRAM.
 - `stage2_efficient.yaml`: Efficient Stage 2 training, requires **20 GB** VRAM. It may lead to slight degradation in visual quality and temporal consistency compared with `stage2.yaml`, suitable for users with consumer-grade GPUs, such as the RTX 3090.
+- `stage1_512.yaml`: Stage1 training on 512 $\times$ 512 resolution videos, requires **30 GB** VRAM.
+- `stage2_512.yaml`: Stage2 training on 512 $\times$ 512 resolution videos, requires **55 GB** VRAM.
 
 Also remember to change the parameters in U-Net config file to specify the data directory, checkpoint save path, and other training hyperparameters. For convenience, we prepared a script for writing a data files list. Run the following command:
 

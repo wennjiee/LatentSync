@@ -28,6 +28,8 @@ from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 from accelerate.utils import set_seed
 from latentsync.whisper.audio2feature import Audio2Feature
+from DeepCache import DeepCacheSDHelper
+
 
 def main(config, args):
     if not os.path.exists(args.video_path):
@@ -64,20 +66,26 @@ def main(config, args):
     vae.config.scaling_factor = 0.18215
     vae.config.shift_factor = 0
 
-    denoising_unet, _ = UNet3DConditionModel.from_pretrained(
+    unet, _ = UNet3DConditionModel.from_pretrained(
         OmegaConf.to_container(config.model),
         args.inference_ckpt_path,
         device="cpu",
     )
 
-    denoising_unet = denoising_unet.to(dtype=dtype)
+    unet = unet.to(dtype=dtype)
 
     pipeline = LipsyncPipeline(
         vae=vae,
         audio_encoder=audio_encoder,
-        denoising_unet=denoising_unet,
+        unet=unet,
         scheduler=scheduler,
     ).to("cuda")
+
+    # use DeepCache
+    if args.enable_deepcache:
+        helper = DeepCacheSDHelper(pipe=pipeline)
+        helper.set_params(cache_interval=3, cache_branch_id=0)
+        helper.enable()
 
     if args.seed != -1:
         set_seed(args.seed)
@@ -91,7 +99,6 @@ def main(config, args):
         video_path=args.video_path,
         audio_path=args.audio_path,
         video_out_path=args.video_out_path,
-        video_mask_path=args.video_out_path.replace(".mp4", "_mask.mp4"),
         num_frames=config.data.num_frames,
         num_inference_steps=args.inference_steps,
         guidance_scale=args.guidance_scale,
@@ -99,6 +106,7 @@ def main(config, args):
         width=config.data.resolution,
         height=config.data.resolution,
         mask_image_path=config.data.mask_image_path,
+        temp_dir=args.temp_dir,
     )
 
 
@@ -112,8 +120,10 @@ if __name__ == "__main__":
     parser.add_argument("--audio_path", type=str, default='./data/intro_6s.wav')
     parser.add_argument("--video_out_path", type=str, default='')
     parser.add_argument("--inference_steps", type=int, default=20)
-    parser.add_argument("--guidance_scale", type=float, default=1.5)
+    parser.add_argument("--guidance_scale", type=float, default=1.0)
+    parser.add_argument("--temp_dir", type=str, default="temp")
     parser.add_argument("--seed", type=int, default=1247)
+    parser.add_argument("--enable_deepcache", action="store_true")
     args = parser.parse_args()
 
     if not args.video_out_path:
