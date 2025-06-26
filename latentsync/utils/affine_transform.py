@@ -119,11 +119,11 @@ class AlignRestore(object):
         points2_normalized = points2_centered / s2
 
         covariance = torch.matmul(points1_normalized.T, points2_normalized)
-        U, S, V = torch.svd(covariance)
+        U, S, V = torch.svd(covariance.float())
 
         R = torch.matmul(V, U.T)
 
-        det = torch.det(R)
+        det = torch.det(R.float())
         if det < 0:
             V[:, -1] = -V[:, -1]
             R = torch.matmul(V, U.T)

@@ -8,10 +8,10 @@ data:
 
   val_video_path: assets/demo1_video.mp4
   val_audio_path: assets/demo1_audio.wav
-  batch_size: 1 # 4
+  batch_size: 1 # 8
   num_workers: 12 # 12
   num_frames: 16
-  resolution: 256
+  resolution: 512
   mask_image_path: latentsync/utils/mask.png
   audio_sample_rate: 16000
   video_fps: 25
@@ -22,17 +22,14 @@ ckpt:
   save_ckpt_steps: 10000
 
 run:
-  pixel_space_supervise: true
-  use_syncnet: true
+  pixel_space_supervise: false
+  use_syncnet: false
   sync_loss_weight: 0.05
   perceptual_loss_weight: 0.1 # 0.1
   recon_loss_weight: 1 # 1
   guidance_scale: 1.5 # [1.0 - 3.0]
   trepa_loss_weight: 10
   inference_steps: 20
-  trainable_modules:
-    - motion_modules.
-    - attentions.
   seed: 1247
   use_mixed_noise: true
   mixed_noise_alpha: 1 # 1
@@ -82,7 +79,7 @@ model:
   sample_size: 64
   resnet_time_scale_shift: default # Choose between [default, scale_shift]
 
-  use_motion_module: true
+  use_motion_module: false
   motion_module_resolutions: [1, 2, 4, 8]
   motion_module_mid_block: false
   motion_module_decoder_only: false
