@@ -394,8 +394,13 @@ class LipsyncPipeline(DiffusionPipeline):
         AUDIO_FRAMES_BATCH = min(len(whisper_chunks), 1500)
         video_load_frames = min(len(whisper_chunks), 1500)
         video_frames = read_video(video_path, use_decord=False, max_frames=video_load_frames)
-        video_frames = video_frames[::-1]
+        # video_frames = video_frames[::-1]
         video_frames, faces, boxes, affine_matrices = self.loop_video(whisper_chunks[0: AUDIO_FRAMES_BATCH], video_frames)
+        
+        video_frames = video_frames[::-1]
+        faces = torch.flip(faces, [0])
+        boxes = boxes[::-1]
+        affine_matrices = affine_matrices[::-1]
         
         for start_idx in tqdm.tqdm(range(0, len(whisper_chunks), AUDIO_FRAMES_BATCH), position=0, desc="Overall progress..."):
             
@@ -532,5 +537,13 @@ class LipsyncPipeline(DiffusionPipeline):
         audio_samples = audio_samples[:audio_samples_remain_length].cpu().numpy()
         sf.write(os.path.join(temp_dir, "audio.wav"), audio_samples, audio_sample_rate)
         print('Start to synthesize video with audio')
-        command = f"ffmpeg -y -nostdin -i {concat_video_out} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
+        command = (
+            f"ffmpeg -y -nostdin "
+            f"-i {concat_video_out} "
+            f"-i {os.path.join(temp_dir, 'audio.wav')} "
+            f"-c:v libx264 -crf 18 "
+            f"-c:a aac -b:a 192k "
+            f"{video_out_path}"
+        )
+        # command = f"ffmpeg -y -nostdin -i {concat_video_out} -i {os.path.join(temp_dir, 'audio.wav')} -c:v libx264 -c:a aac -q:v 0 -q:a 0 {video_out_path}"
         subprocess.run(command, shell=True)
