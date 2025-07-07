@@ -4,6 +4,7 @@ from typing import Tuple
 import scipy
 import numpy as np
 import torch
+from latentsync.utils.util import check_model_and_download
 
 
 def compute_fvd(feats_fake: np.ndarray, feats_real: np.ndarray) -> float:
@@ -27,6 +28,7 @@ def compute_stats(feats: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 @torch.no_grad()
 def compute_our_fvd(videos_fake: np.ndarray, videos_real: np.ndarray, device: str = "cuda") -> float:
     i3d_path = "checkpoints/auxiliary/i3d_torchscript.pt"
+    check_model_and_download(i3d_path)
     i3d_kwargs = dict(
         rescale=False, resize=False, return_features=True
     )  # Return raw features before the softmax layer.

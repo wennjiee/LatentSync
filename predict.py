@@ -28,12 +28,6 @@ class Predictor(BasePredictor):
         # Soft links for the auxiliary models
         os.system("mkdir -p ~/.cache/torch/hub/checkpoints")
         os.system(
-            "ln -s $(pwd)/checkpoints/auxiliary/2DFAN4-cd938726ad.zip ~/.cache/torch/hub/checkpoints/2DFAN4-cd938726ad.zip"
-        )
-        os.system(
-            "ln -s $(pwd)/checkpoints/auxiliary/s3fd-619a316812.pth ~/.cache/torch/hub/checkpoints/s3fd-619a316812.pth"
-        )
-        os.system(
             "ln -s $(pwd)/checkpoints/auxiliary/vgg16-397923af.pth ~/.cache/torch/hub/checkpoints/vgg16-397923af.pth"
         )
 
@@ -41,7 +35,8 @@ class Predictor(BasePredictor):
         self,
         video: Path = Input(description="Input video", default=None),
         audio: Path = Input(description="Input audio to ", default=None),
-        guidance_scale: float = Input(description="Guidance scale", ge=1, le=2.5, default=1.5),
+        guidance_scale: float = Input(description="Guidance scale", ge=1, le=3, default=2.0),
+        inference_steps: int = Input(description="Inference steps", ge=20, le=50, default=20),
         seed: int = Input(description="Set to 0 for Random seed", default=0),
     ) -> Path:
         """Run a single prediction on the model"""
@@ -57,6 +52,6 @@ class Predictor(BasePredictor):
 
         # Run the following command:
         os.system(
-            f"python -m scripts.inference --unet_config_path {config_path} --inference_ckpt_path {ckpt_path} --guidance_scale {str(guidance_scale)} --video_path {video_path} --audio_path {audio_path} --video_out_path {output_path} --seed {seed}"
+            f"python -m scripts.inference --unet_config_path {config_path} --inference_ckpt_path {ckpt_path} --guidance_scale {str(guidance_scale)} --video_path {video_path} --audio_path {audio_path} --video_out_path {output_path} --seed {seed} --inference_steps {inference_steps}"
         )
         return Path(output_path)

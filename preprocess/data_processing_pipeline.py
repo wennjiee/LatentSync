@@ -23,11 +23,17 @@ from preprocess.segment_videos import segment_videos_multiprocessing
 from preprocess.sync_av import sync_av_multi_gpus
 from preprocess.filter_visual_quality import filter_visual_quality_multi_gpus
 from preprocess.remove_incorrect_affined import remove_incorrect_affined_multiprocessing
+from latentsync.utils.util import check_model_and_download
 
 
 def data_processing_pipeline(
     total_num_workers, per_gpu_num_workers, resolution, sync_conf_threshold, temp_dir, input_dir
 ):
+    print("Checking models are downloaded...")
+    check_model_and_download("checkpoints/auxiliary/syncnet_v2.model")
+    check_model_and_download("checkpoints/auxiliary/sfd_face.pth")
+    check_model_and_download("checkpoints/auxiliary/koniq_pretrained.pkl")
+
     print("Removing broken videos...")
     remove_broken_videos_multiprocessing(input_dir, total_num_workers)
 
@@ -43,18 +49,17 @@ def data_processing_pipeline(
     segmented_dir = os.path.join(os.path.dirname(input_dir), "segmented")
     segment_videos_multiprocessing(shot_dir, segmented_dir, total_num_workers)
 
+    # If there are too many videos, you can first use this step to filter and reduce the quantity
     # print("Filtering high resolution...")
     # high_resolution_dir = os.path.join(os.path.dirname(input_dir), "high_resolution")
     # filter_high_resolution_multiprocessing(segmented_dir, high_resolution_dir, resolution, total_num_workers)
 
     print("Affine transforming videos...")
     affine_transformed_dir = os.path.join(os.path.dirname(input_dir), "affine_transformed")
-    affine_transform_multi_gpus(
-        segmented_dir, affine_transformed_dir, temp_dir, resolution, per_gpu_num_workers // 2
-    )
+    affine_transform_multi_gpus(segmented_dir, affine_transformed_dir, temp_dir, resolution, per_gpu_num_workers // 2)
 
-    print("Removing incorrect affined videos...")
-    remove_incorrect_affined_multiprocessing(affine_transformed_dir, total_num_workers)
+    # print("Removing incorrect affined videos...")
+    # remove_incorrect_affined_multiprocessing(affine_transformed_dir, total_num_workers)
 
     print("Syncing audio and video...")
     av_synced_dir = os.path.join(os.path.dirname(input_dir), f"av_synced_{sync_conf_threshold}")

@@ -55,8 +55,8 @@ def segment_videos_multiprocessing(input_dir, output_dir, num_workers):
 
 
 if __name__ == "__main__":
-    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/avatars_new/cut"
-    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/avatars_new/segmented"
+    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/shot"
+    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/segmented"
     num_workers = 50
 
     segment_videos_multiprocessing(input_dir, output_dir, num_workers)

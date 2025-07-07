@@ -10,6 +10,7 @@ from scipy import signal
 from scipy.io import wavfile
 from .syncnet import S
 from shutil import rmtree
+from latentsync.utils.util import check_model_and_download
 
 
 # ==================== Get OFFSET ====================
@@ -209,6 +210,7 @@ class SyncNetEval(torch.nn.Module):
         return im_feat
 
     def loadParameters(self, path):
+        check_model_and_download(path)
         loaded_state = torch.load(path, map_location=lambda storage, loc: storage, weights_only=True)
 
         self_state = self.__S__.state_dict()

@@ -63,8 +63,8 @@ def resample_fps_hz_multiprocessing(input_dir, output_dir, num_workers):
 
 
 if __name__ == "__main__":
-    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/HDTF/segmented/train"
-    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/HDTF/resampled_test"
+    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/raw"
+    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/resampled"
     num_workers = 20
 
     resample_fps_hz_multiprocessing(input_dir, output_dir, num_workers)

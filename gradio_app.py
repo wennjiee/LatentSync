@@ -5,7 +5,7 @@ from omegaconf import OmegaConf
 import argparse
 from datetime import datetime
 
-CONFIG_PATH = Path("configs/unet/stage2.yaml")
+CONFIG_PATH = Path("configs/unet/stage2_512.yaml")
 CHECKPOINT_PATH = Path("checkpoints/latentsync_unet.pt")
 
 
@@ -62,8 +62,10 @@ def create_args(
     parser.add_argument("--audio_path", type=str, required=True)
     parser.add_argument("--video_out_path", type=str, required=True)
     parser.add_argument("--inference_steps", type=int, default=20)
-    parser.add_argument("--guidance_scale", type=float, default=1.0)
+    parser.add_argument("--guidance_scale", type=float, default=1.5)
+    parser.add_argument("--temp_dir", type=str, default="temp")
     parser.add_argument("--seed", type=int, default=1247)
+    parser.add_argument("--enable_deepcache", action="store_true")
 
     return parser.parse_args(
         [
@@ -81,32 +83,25 @@ def create_args(
             str(guidance_scale),
             "--seed",
             str(seed),
+            "--temp_dir",
+            "temp",
+            "--enable_deepcache",
         ]
     )
 
 
 # Create Gradio interface
-with gr.Blocks(title="LatentSync Video Processing") as demo:
+with gr.Blocks(title="LatentSync demo") as demo:
     gr.Markdown(
         """
-    # LatentSync: Taming Audio-Conditioned Latent Diffusion Models for Lip Sync with SyncNet Supervision
-    Upload a video and audio file to process with LatentSync model.
-
-    <div align="center">
-        <strong>Chunyu Li1,2  Chao Zhang1  Weikai Xu1  Jinghui Xie1,†  Weiguo Feng1
-        Bingyue Peng1  Weiwei Xing2,†</strong>
-    </div>
-
-    <div align="center">
-        <strong>1ByteDance   2Beijing Jiaotong University</strong>
-    </div>
+    <h1 align="center">LatentSync</h1>
 
     <div style="display:flex;justify-content:center;column-gap:4px;">
         <a href="https://github.com/bytedance/LatentSync">
             <img src='https://img.shields.io/badge/GitHub-Repo-blue'>
         </a> 
-        <a href="https://arxiv.org/pdf/2412.09262">
-            <img src='https://img.shields.io/badge/ArXiv-Paper-red'>
+        <a href="https://arxiv.org/abs/2412.09262">
+            <img src='https://img.shields.io/badge/arXiv-Paper-red'>
         </a>
     </div>
     """
@@ -120,9 +115,9 @@ with gr.Blocks(title="LatentSync Video Processing") as demo:
             with gr.Row():
                 guidance_scale = gr.Slider(
                     minimum=1.0,
-                    maximum=2.5,
+                    maximum=3.0,
                     value=1.5,
-                    step=0.5,
+                    step=0.1,
                     label="Guidance Scale",
                 )
                 inference_steps = gr.Slider(minimum=10, maximum=50, value=20, step=1, label="Inference Steps")

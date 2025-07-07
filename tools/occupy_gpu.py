@@ -37,8 +37,8 @@ def loop(cuda_device):
     max_mem = int(total * 0.9)
     block_mem = max_mem - used
     while True:
-        x = torch.rand(20, 512, 512, dtype=torch.float, device=cuda_i)
-        y = torch.rand(20, 512, 512, dtype=torch.float, device=cuda_i)
+        x = torch.rand(50, 512, 512, dtype=torch.float, device=cuda_i)
+        y = torch.rand(50, 512, 512, dtype=torch.float, device=cuda_i)
         time.sleep(0.001)
         x = torch.matmul(x, y)
 

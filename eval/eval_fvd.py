@@ -15,7 +15,6 @@
 import mediapipe as mp
 import cv2
 from decord import VideoReader
-from einops import rearrange
 import os
 import numpy as np
 import torch
@@ -34,7 +33,7 @@ class FVD:
         results = self.face_detector.process(image)
 
         if not results.detections:  # Face not detected
-            raise Exception("Face not detected")
+            raise RuntimeError("Face not detected")
 
         detection = results.detections[0]  # Only use the first face in the image
         bounding_box = detection.location_data.relative_bounding_box
@@ -54,7 +53,7 @@ class FVD:
 
     def detect_video(self, video_path):
         vr = VideoReader(video_path)
-        video_frames = vr[20:36].asnumpy()  # Use one frame per second
+        video_frames = vr[20:36].asnumpy()
         vr.seek(0)  # avoid memory leak
         faces = []
         for frame in video_frames:
@@ -63,7 +62,7 @@ class FVD:
             faces.append(face)
 
         if len(faces) != 16:
-            return None
+            return RuntimeError("Insufficient consecutive frames of faces (less than 16).")
         faces = np.stack(faces, axis=0)  # (f, h, w, c)
         faces = torch.from_numpy(faces)
         return faces
@@ -73,16 +72,12 @@ class FVD:
 
         if videos_dir.endswith(".mp4"):
             video_faces = self.detect_video(videos_dir)
-            if video_faces is None:
-                raise RuntimeError("No face detected")
             videos_list.append(video_faces)
         else:
             for file in tqdm.tqdm(os.listdir(videos_dir)):
                 if file.endswith(".mp4"):
                     video_path = os.path.join(videos_dir, file)
                     video_faces = self.detect_video(video_path)
-                    if video_faces is None:
-                        raise RuntimeError("No face detected")
                     videos_list.append(video_faces)
 
         videos_list = torch.stack(videos_list) / 255.0
@@ -93,7 +88,8 @@ def eval_fvd(real_videos_dir: str, fake_videos_dir: str):
     fvd = FVD()
     real_videos = fvd.detect_videos(real_videos_dir)
     fake_videos = fvd.detect_videos(fake_videos_dir)
-    print(compute_our_fvd(real_videos, fake_videos, device="cpu"))
+    fvd_value = compute_our_fvd(real_videos, fake_videos, device="cpu")
+    print(f"FVD: {fvd_value:.3f}")
 
 
 if __name__ == "__main__":

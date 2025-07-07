@@ -104,8 +104,8 @@ def filter_high_resolution_multiprocessing(input_dir, output_dir, resolution, nu
 
 
 if __name__ == "__main__":
-    input_dir = "/mnt/bn/maliva-gen-ai/lichunyu/HDTF/original/train"
-    output_dir = "/mnt/bn/maliva-gen-ai/lichunyu/HDTF/detected/train"
+    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/raw"
+    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li//VoxCeleb2/high_resolution"
     resolution = 256
     num_workers = 50
 

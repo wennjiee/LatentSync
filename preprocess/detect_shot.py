@@ -55,8 +55,8 @@ def detect_shot_multiprocessing(input_dir, output_dir, num_workers):
 
 
 if __name__ == "__main__":
-    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/ads/high-resolution"
-    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/ads/shot"
+    input_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/high_resolution"
+    output_dir = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/shot"
     num_workers = 50
 
     detect_shot_multiprocessing(input_dir, output_dir, num_workers)

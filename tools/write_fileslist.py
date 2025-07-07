@@ -31,7 +31,7 @@ class FileslistWriter:
 
 
 if __name__ == "__main__":
-    fileslist_path = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/fileslist/data_v9_syncnet.txt"
+    fileslist_path = "/mnt/bn/maliva-gen-ai-v2/chunyu.li/fileslist/data_v10_core.txt"
 
     writer = FileslistWriter(fileslist_path)
     writer.append_dataset("/mnt/bn/maliva-gen-ai-v2/chunyu.li/VoxCeleb2/high_visual_quality/train")
