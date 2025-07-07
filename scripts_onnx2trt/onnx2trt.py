@@ -10,12 +10,46 @@ import argparse
 import os
 from omegaconf import OmegaConf
 import torch
-from diffusers import AutoencoderKL, DDIMScheduler
-from latentsync.models.unet import UNet3DConditionModel
-from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
-from accelerate.utils import set_seed
-from latentsync.whisper.audio2feature import Audio2Feature
+import torch.nn as nn
+from diffusers import AutoencoderKL
 
+class VAEEncoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.vae = AutoencoderKL.from_pretrained("./checkpoints/sd-vae-ft-mse", torch_dtype=torch.float16)
+        self.vae.config.scaling_factor = 0.18215
+        self.vae.config.shift_factor = 0
+
+    def forward(self, x, eps):
+        dist = self.vae.encode(x).latent_dist
+        mean = dist.mean
+        logvar = dist.logvar
+        std = torch.exp(0.5 * logvar)
+        z = mean + std * eps
+        return z
+
+class VAEDecoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.vae = AutoencoderKL.from_pretrained("./checkpoints/sd-vae-ft-mse", torch_dtype=torch.float32)
+        self.vae.config.scaling_factor = 0.18215
+        self.vae.config.shift_factor = 0
+
+    def forward(self, latents):
+        return self.vae.decode(latents).sample
+class VAEDecoderONNX(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.vae = AutoencoderKL.from_pretrained("./checkpoints/sd-vae-ft-mse", torch_dtype=torch.float32)
+        self.vae.config.scaling_factor = 0.18215
+        self.vae.config.shift_factor = 0
+        self.post_quant_conv = self.vae.post_quant_conv
+        self.decoder = self.vae.decoder
+
+    def forward(self, latents):
+        z = self.post_quant_conv(latents)
+        image = self.decoder(z)
+        return image
 
 def export_denoising_unet_to_onnx(denoising_unet_model, onnx_path):
     denoising_unet_model.to('cuda')
@@ -45,7 +79,6 @@ def export_denoising_unet_to_onnx(denoising_unet_model, onnx_path):
     )
 
     print(f"Denoising UNet model exported to {onnx_path}")
-
 
 def build_unet_tensorrt_engine(onnx_file, engine_file):
     logger = trt.Logger(trt.Logger.WARNING)
@@ -90,30 +123,53 @@ def build_unet_tensorrt_engine(onnx_file, engine_file):
 
     print(f"TensorRT engine for UNet saved to {engine_file}")
 
-def export_vae_to_onnx(vae_model, onnx_path):
+def export_vae_encoder_to_onnx(onnx_path):
+    vae_model = VAEEncoder()
     vae_model.to('cuda')
     vae_model.eval()
 
-    # 创建一个与实际输入尺寸一致的假输入
     dummy_input = torch.randn(16, 3, 256, 256).to(torch.float16).to('cuda')
-    
-    # 导出为 ONNX 格式
+    dummy_eps = torch.randn(16, 4, 32, 32).to(torch.float16).to('cuda')
+
     torch.onnx.export(
         vae_model,
-        dummy_input,
+        (dummy_input, dummy_eps),
         onnx_path,
         export_params=True,
-        opset_version=14,
+        opset_version=18,
         do_constant_folding=True,
         input_names=['input'],
         output_names=['output'],
-        verbose=True
     )
 
     model_onnx = onnx.load(onnx_path)
     model_onnx, _ = onnxsim.simplify(model_onnx)
     onnx.save(model_onnx, onnx_path)
-    
+
+    print(f"VAE model exported to {onnx_path}")
+
+def export_vae_decoder_to_onnx(onnx_path):
+    vae_model = VAEDecoderONNX()
+    vae_model.to('cuda')
+    vae_model.eval()
+
+    dummy_input = torch.randn(16, 4, 32, 32).to(torch.float32).to('cuda')
+    torch.onnx.export(
+        vae_model,
+        dummy_input,
+        onnx_path,
+        export_params=True,
+        opset_version=18,
+        do_constant_folding=True,
+        input_names=['input'],
+        output_names=['output'],
+        verbose=False
+    )
+
+    model_onnx = onnx.load(onnx_path)
+    model_onnx, _ = onnxsim.simplify(model_onnx)
+    onnx.save(model_onnx, onnx_path)
+
     print(f"VAE model exported to {onnx_path}")
 
 def build_vae_tensorrt_engine(onnx_file, engine_file):
@@ -123,67 +179,62 @@ def build_vae_tensorrt_engine(onnx_file, engine_file):
     network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
     parser = trt.OnnxParser(network, logger)
 
-    with open(onnx_file, "rb") as f:
-        if not parser.parse(f.read()):
-            print("ERROR: Failed to parse ONNX file")
-            for err in range(parser.num_errors):
-                print(parser.get_error(err))
-            return None
+    try:
+        with open(onnx_file, "rb") as f:
+            onnx_model = f.read()
+            if not parser.parse(onnx_model):
+                print("ERROR: Failed to parse ONNX file")
+                for err in range(parser.num_errors):
+                    print(parser.get_error(err))
+                return None
+    except FileNotFoundError:
+        print(f"ERROR: File {onnx_file} not found")
+        return None
+    except Exception as e:
+        print(f"ERROR: {str(e)}")
+        return None
 
     config = builder.create_builder_config()
     config.set_flag(trt.BuilderFlag.FP16)
-    
-    engine = builder.build_engine(network, config)
+    serialized_engine = builder.build_serialized_network(network, config)
+    if serialized_engine is None:
+        print("ERROR: Failed to build TensorRT engine")
+        return None
     with open(engine_file, "wb") as f:
-        f.write(engine.serialize())
+        f.write(serialized_engine)
+    print(f"TensorRT Engine saved to {engine_file}")
 
-    print(f"TensorRT engine for VAE saved to {engine_file}")
+if __name__ == "__main__":
+    start_time = datetime.now()
 
-def main(config, args):
-
-    print(f"Loaded checkpoint path: {args.inference_ckpt_path}")
-
-    # vae = AutoencoderKL.from_pretrained("./checkpoints/sd-vae-ft-mse", torch_dtype=dtype)
-    # vae.config.scaling_factor = 0.18215
-    # vae.config.shift_factor = 0
-
-    # # 1. 导出 VAE 到 ONNX
-    # vae_onnx_path = "vae.onnx"
+    print(f"start converting")
     
-    # if not os.path.exists(vae_trt_path):
-    #     export_vae_to_onnx(vae, vae_onnx_path)
+    # vae_onnx_path = "vae_encoder.onnx"
+    # if not os.path.exists(vae_onnx_path):
+    #     export_vae_encoder_to_onnx(vae_onnx_path)
+    # vae_encoder_trt_path = "vae_encoder.trt"
+    # if not os.path.exists(vae_encoder_trt_path):
+    #     build_vae_tensorrt_engine(vae_onnx_path, vae_encoder_trt_path)
 
-    # # 2. 转换 VAE 为 TensorRT
-    # vae_trt_path = "vae.trt"
-    # if not os.path.exists(vae_trt_path):
-    #     build_vae_tensorrt_engine('vae.onnx', vae_trt_path)
+    vae_onnx_path = "vae_decoder.onnx"
+    if not os.path.exists(vae_onnx_path):
+        export_vae_decoder_to_onnx(vae_onnx_path)
+    # vae_encoder_trt_path = "vae_decoder.trt"
+    # if not os.path.exists(vae_encoder_trt_path):
+    #     build_vae_tensorrt_engine(vae_onnx_path, vae_encoder_trt_path)
 
-    # # 5. 导出 denoising_unet 到 ONNX
     # denoising_unet, _ = UNet3DConditionModel.from_pretrained(
     #     OmegaConf.to_container(config.model),
     #     args.inference_ckpt_path,
     # ).to(torch.float16)
 
-    unet_onnx_path = "./trt_engines/denoising_unet_onnx_wrapper_16/denoising_unet.onnx"
+    # unet_onnx_path = "./trt_engines/denoising_unet_onnx_wrapper_16/denoising_unet.onnx"
     # if not os.path.exists(unet_onnx_path):
     #     export_denoising_unet_to_onnx(denoising_unet, unet_onnx_path)
 
-    # 6. 转换 denoising_unet 为 TensorRT
-    unet_trt_path = "./trt_engines/denoising_unet_dynamic_10_2.trt"
-    if not os.path.exists(unet_trt_path):
-        build_unet_tensorrt_engine(unet_onnx_path, unet_trt_path)
-
-
-if __name__ == "__main__":
-    start_time = datetime.now()
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--unet_config_path", type=str, default="configs/unet/stage2.yaml")
-    parser.add_argument("--inference_ckpt_path", type=str, default='./checkpoints/latentsync_unet.pt')
-    args = parser.parse_args()
-
-    config = OmegaConf.load(args.unet_config_path)
-    main(config, args)
+    # unet_trt_path = "./trt_engines/denoising_unet_dynamic_10_2.trt"
+    # if not os.path.exists(unet_trt_path):
+    #     build_unet_tensorrt_engine(unet_onnx_path, unet_trt_path)
 
     end_time = datetime.now()
     elapsed_time = (end_time - start_time).total_seconds()

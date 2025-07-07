@@ -64,7 +64,7 @@ def main(config, args):
     vae = AutoencoderKL.from_pretrained("./checkpoints/sd-vae-ft-mse", torch_dtype=dtype)
     vae.config.scaling_factor = 0.18215
     vae.config.shift_factor = 0
-
+    
     # denoising_unet, _ = UNet3DConditionModel.from_pretrained(
     #     OmegaConf.to_container(config.model),
     #     args.inference_ckpt_path,

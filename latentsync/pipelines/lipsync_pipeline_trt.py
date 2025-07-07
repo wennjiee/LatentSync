@@ -43,6 +43,7 @@ import wave
 import tensorrt as trt
 import pycuda.driver as cuda
 import pycuda.autoinit
+
 trt.init_libnvinfer_plugins(None, "")
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -71,14 +72,25 @@ class LipsyncPipelineTRT(DiffusionPipeline):
         self.engine = self.load_trt_engine(unet_engine_path)
         self.context = self.engine.create_execution_context()
 
+        # vae_encoder_engine_path='./trt_engines/vae_encoder.trt'
+        # self.vae_encoder_engine = self.load_trt_engine(vae_encoder_engine_path)
+        # self.vae_encoder_context = self.vae_encoder_engine.create_execution_context()
+        
+        # vae_decoder_engine_path='./trt_engines/vae_decoder.trt'
+        # self.vae_decoder_engine = self.load_trt_engine(vae_decoder_engine_path)
+        # self.vae_decoder_context = self.vae_decoder_engine.create_execution_context()
+        
         self.register_modules(
             vae=vae,
             audio_encoder=audio_encoder,
             scheduler=scheduler
         )
+        self.vae_scaling_factor = 0.18215
+        self.vae_shift_factor = 0
+        self.vae_block_out_channels = [128, 256, 512, 512]
+        self.vae_scale_factor = 2 ** (len(self.vae_block_out_channels) - 1)
+        self.vae_latent_channels = 4
         
-        self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
-
         self.set_progress_bar_config(desc="Steps")
     
     def load_trt_engine(self, engine_path):
@@ -99,7 +111,22 @@ class LipsyncPipelineTRT(DiffusionPipeline):
         bindings = [int(denoising_unet_input.data_ptr()), int(t.data_ptr()), int(audio_embeds.data_ptr()), int(noise_pred_cuda.data_ptr())]
         self.context.execute_v2(bindings)
         return noise_pred_cuda
-     
+    
+    def vae_encode_trt_infer(self, image):
+
+        image_latents = torch.empty((16, 4, 32, 32), dtype=torch.float16, device='cuda')
+        eps = torch.randn(16, 4, 32, 32).to(torch.float16).to('cuda')
+        bindings = [int(image.data_ptr()), int(eps.data_ptr()), int(image_latents.data_ptr())]
+        self.vae_encoder_context.execute_v2(bindings)
+        return image_latents
+
+    def vae_decode_trt_infer(self, latents):
+
+        decoded_latents = torch.empty((16, 3, 256, 256), dtype=torch.float16, device='cuda')
+        bindings = [int(latents.data_ptr()), int(decoded_latents.data_ptr())]
+        self.vae_decoder_context.execute_v2(bindings)
+        return decoded_latents
+       
     def enable_vae_slicing(self):
         self.vae.enable_slicing()
 
@@ -108,20 +135,13 @@ class LipsyncPipelineTRT(DiffusionPipeline):
 
     @property
     def _execution_device(self):
-        if self.device != torch.device("meta") or not hasattr(self.denoising_unet, "_hf_hook"):
-            return self.device
-        for module in self.denoising_unet.modules():
-            if (
-                hasattr(module, "_hf_hook")
-                and hasattr(module._hf_hook, "execution_device")
-                and module._hf_hook.execution_device is not None
-            ):
-                return torch.device(module._hf_hook.execution_device)
-        return self.device
+        return torch.device("cuda")
 
     def decode_latents(self, latents):
-        latents = latents / self.vae.config.scaling_factor + self.vae.config.shift_factor
+        latents = latents / self.vae_scaling_factor + self.vae_shift_factor
         latents = rearrange(latents, "b c f h w -> (b f) c h w")
+        # decoded_latents = self.vae_decode_trt_infer(latents)
+        # decoded_latents = torch.tanh(decoded_latents)
         decoded_latents = self.vae.decode(latents).sample
         return decoded_latents
 
@@ -184,8 +204,9 @@ class LipsyncPipelineTRT(DiffusionPipeline):
         masked_image = masked_image.to(device=device, dtype=dtype)
 
         # encode the mask image into latents space so we can concatenate it to the latents
+        # masked_image_latents_ = self.vae_encode_trt_infer(masked_image)
         masked_image_latents = self.vae.encode(masked_image).latent_dist.sample(generator=generator)
-        masked_image_latents = (masked_image_latents - self.vae.config.shift_factor) * self.vae.config.scaling_factor
+        masked_image_latents = (masked_image_latents - self.vae_shift_factor) * self.vae_scaling_factor
 
         # aligning device to prevent device errors when concating it with the latent model input
         masked_image_latents = masked_image_latents.to(device=device, dtype=dtype)
@@ -203,8 +224,9 @@ class LipsyncPipelineTRT(DiffusionPipeline):
 
     def prepare_image_latents(self, images, device, dtype, generator, do_classifier_free_guidance):
         images = images.to(device=device, dtype=dtype)
+        # image_latents_ = self.vae_encode_trt_infer(images)
         image_latents = self.vae.encode(images).latent_dist.sample(generator=generator)
-        image_latents = (image_latents - self.vae.config.shift_factor) * self.vae.config.scaling_factor
+        image_latents = (image_latents - self.vae_shift_factor) * self.vae_scaling_factor
         image_latents = rearrange(image_latents, "f c h w -> 1 c f h w")
         image_latents = torch.cat([image_latents] * 2) if do_classifier_free_guidance else image_latents
 
@@ -250,7 +272,7 @@ class LipsyncPipelineTRT(DiffusionPipeline):
         video_frames = video_frames[start_idx: end_idx]
         boxes = boxes[start_idx: end_idx]
         affine_matrices = affine_matrices[start_idx: end_idx]
-        
+        # video_frames = video_frames[: len(faces)]
         out_frames = []
         print(f"Restoring {len(faces)} faces...")
         for index, face in enumerate(tqdm.tqdm(faces, position=2)):
@@ -394,7 +416,7 @@ class LipsyncPipelineTRT(DiffusionPipeline):
             faces = torch.flip(faces, [0])[:len(current_chunks)]
             boxes = boxes[::-1][:len(current_chunks)]
             affine_matrices = affine_matrices[::-1][:len(current_chunks)]
-            num_channels_latents = self.vae.config.latent_channels
+            num_channels_latents = self.vae_latent_channels
 
             # Prepare latent variables, 1*4*len(current_chunks)*32*32
             all_latents = self.prepare_latents(
