@@ -28,10 +28,10 @@ class FaceDetector:
             for face in faces:
                 bbox = face.bbox.astype(np.int_).tolist()
                 w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-                if w < 50 or h < 80:
-                    continue
-                if w / h > 1.5 or w / h < 0.2:
-                    continue
+                # if w < 50 or h < 80:
+                #     continue
+                # if w / h > 1.5 or w / h < 0.2:
+                #     continue
                 if face.det_score < threshold:
                     continue
                 size_now = w * h
