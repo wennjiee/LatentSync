@@ -32,6 +32,8 @@ from decord import AudioReader, VideoReader
 import shutil
 import subprocess
 import tqdm
+import math
+from glob import glob
 
 # Machine epsilon for a float32 (single precision)
 eps = np.finfo(np.float32).eps
@@ -41,6 +43,7 @@ def read_json(filepath: str):
     with open(filepath) as f:
         json_dict = json.load(f)
     return json_dict
+
 
 def get_video_resolution(video_path):
     command = [
@@ -54,6 +57,7 @@ def get_video_resolution(video_path):
     width = video_info["streams"][0]["width"]
     height = video_info["streams"][0]["height"]
     return width, height
+
 
 def read_video(video_path: str, change_fps=True, use_decord=True, max_frames=-1):
     if change_fps:
@@ -82,6 +86,141 @@ def read_video(video_path: str, change_fps=True, use_decord=True, max_frames=-1)
     else:
         return read_video_cv2(target_video_path, max_frames)
 
+
+def split_video_and_audio(workspace: str, video_path: str, audio_path: str, segment_frames: int, fps: int):
+    """
+    Preprocessing function for video and audio. 
+    It segments the media to enable execution under low-resource conditions.
+    """
+    # 1. Video splitting
+    width, height = get_video_resolution(video_path)
+    print(f'width={width}, height={height}')
+    scale_option = []
+    # Resizing the resolution may result in aspect ratio distortion.
+    # check if resolution > 1080P, convert it to 1080P
+    # if height > 1080:
+    #     scale_option = "-vf scale=-1:1080"
+    # Maybe accelerate using nvml
+    segments_path = os.path.join(workspace, "segments")
+    os.makedirs(segments_path, exist_ok=True)
+    segment_seconds = int(segment_frames / fps)
+    command = [
+        "ffmpeg", "-y",
+        "-nostdin", "-i", video_path,
+        *scale_option, "-r", "25",
+        "-c:v", "libx264",
+        "-crf", "18",
+        "-preset", "fast",
+        "-threads", "8",
+        "-force_key_frames", f"expr:gte(t,n_forced*{segment_seconds})",
+        "-c:a", "copy",
+        "-f", "segment",
+        "-segment_time", f"{segment_seconds}",
+        "-reset_timestamps", "1",
+        os.path.join(segments_path, "chunk_%03d.mp4"),
+    ]
+    print(f'cmd = {command}')
+    subprocess.run(command, shell=False)
+    video_files = sorted(glob(os.path.abspath(os.path.join(segments_path, "chunk_*.mp4"))))
+    
+    # 2. Audio splitting
+    audio_files = []
+    print(f"[INFO] Extracting audio from {len(video_files)} segments...")
+    for video_file in video_files:
+        base_name = os.path.splitext(os.path.basename(video_file))[0]
+        wav_file = os.path.abspath(os.path.join(segments_path, f"{base_name}.wav"))
+        extract_cmd = [
+            "ffmpeg", "-y", "-i", video_file,
+            "-vn", "-loglevel", "warning",
+            "-threads", "8",
+            "-acodec", "pcm_s16le",
+            "-ar", "16000",
+            "-ac", "2",
+            wav_file
+        ]
+        subprocess.run(extract_cmd, check=True)
+        audio_files.append(wav_file)
+    print(f"[INFO] Finish Extracting Audio")
+    return video_files, audio_files
+
+
+def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str):
+    """
+    Loops the video in alternating forward and reverse order until it exceeds the audio length, 
+    Trims it to match the audio duration.
+    """
+    os.makedirs(workspace, exist_ok=True)
+
+    def get_media_duration(path):
+        result = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return float(result.stdout)
+
+    def create_reversed_video(src, dst):
+        cmd = [
+            'ffmpeg', '-y', '-i', src,
+            '-vf', 'reverse',
+            '-an', "-threads", "8",
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+            dst
+        ]
+        subprocess.run(cmd, check=True)
+
+    def create_forward_video(src, dst):
+        cmd = [
+            'ffmpeg', '-y', '-i', src,
+            '-an', "-threads", "8",
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+            dst
+        ]
+        subprocess.run(cmd, check=True)
+
+    def create_concat_file(n, fwd_file, rev_file, list_path):
+        with open(list_path, 'w') as f:
+            for i in range(n):
+                file_path = fwd_file if i % 2 == 0 else rev_file
+                f.write(f"file '{os.path.abspath(file_path)}'\n")
+    
+    print("Getting video and audio durations...")
+    video_duration = get_media_duration(input_video)
+    audio_duration = get_media_duration(input_audio)
+    print(f"Video duration: {video_duration}s, Audio duration: {audio_duration}s")
+
+
+    # Calculate the number of loops to ensure the video duration >= audio duration
+    n_loops = math.ceil(audio_duration / video_duration)
+    forward_video = os.path.join(workspace, "forward.mp4")
+    reverse_video = os.path.join(workspace, "reverse.mp4")
+    concat_list = os.path.join(workspace, "loop_concat_list.txt")
+    loop_video = os.path.join(workspace, "loop_video.mp4")
+
+    create_reversed_video(input_video, reverse_video)
+    create_forward_video(input_video, forward_video)
+    create_concat_file(n_loops, forward_video, reverse_video, concat_list)
+
+    subprocess.run([
+        'ffmpeg', '-y', "-threads", "8", '-f', 'concat', '-safe', '0', '-i', concat_list,
+        '-c', 'copy', loop_video
+    ], check=True)
+
+    standard_video = os.path.join(workspace, 'input.mp4')
+    subprocess.run([
+        'ffmpeg', '-y',
+        '-i', loop_video,
+        '-i', input_audio,
+        "-threads", "8",
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+        '-c:a', 'aac',
+        '-shortest',
+        standard_video
+    ], check=True)
+    
+    print(f"Merging completed, File: {standard_video}")
+    return standard_video, input_audio
 
 def read_video_decord(video_path: str, max_frames: int):
     vr = VideoReader(video_path)
@@ -164,26 +303,6 @@ def write_video_cv2(video_output_path: str, video_frames: np.ndarray, fps: int):
         out.write(frame)
     out.release()
 
-def write_video_from_imgs(video_output_path: str, frame_dir: str, fps: int):
-    print(f'write video from img: {video_output_path}')
-    first_frame_path = os.path.join(frame_dir, "frame_00000.png")
-    first_frame = cv2.imread(first_frame_path)
-    if first_frame is None:
-        raise ValueError(f"无法读取第一帧：{first_frame_path}")
-    height, width = first_frame.shape[:2]
-    out = cv2.VideoWriter(video_output_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
-    frame_files = sorted(os.listdir(frame_dir))
-    
-    for frame_file in tqdm.tqdm(frame_files):
-        frame_path = os.path.join(frame_dir, frame_file)
-        frame = cv2.imread(frame_path)
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-        if frame is None:
-            print(f"警告：无法读取帧 {frame_path}，跳过")
-            continue
-        out.write(frame)
-    out.release()
-    print(f"write to path: {video_output_path}")
 
 def init_dist(backend="nccl", **kwargs):
     """Initializes distributed environment."""

@@ -116,14 +116,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--unet_config_path", type=str, default="configs/unet/stage2.yaml")
     parser.add_argument("--inference_ckpt_path", type=str, default='./checkpoints/latentsync_unet.pt')
-    parser.add_argument("--video_path", type=str, default='./data/wwj_3s.mp4')
-    parser.add_argument("--audio_path", type=str, default='./data/intro_6s.wav')
+    parser.add_argument("--video_path", type=str, default='./assets/demo1_video.mp4')
+    parser.add_argument("--audio_path", type=str, default='./assets/demo1_audio.wav')
     parser.add_argument("--video_out_path", type=str, default='')
     parser.add_argument("--inference_steps", type=int, default=20)
     parser.add_argument("--guidance_scale", type=float, default=1.0)
     parser.add_argument("--temp_dir", type=str, default="temp")
     parser.add_argument("--seed", type=int, default=1247)
-    parser.add_argument("--enable_deepcache", action="store_true")
+    parser.add_argument("--enable_deepcache", type=bool, default=True)
     args = parser.parse_args()
 
     if not args.video_out_path:
