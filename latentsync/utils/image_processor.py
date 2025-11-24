@@ -19,7 +19,7 @@ from einops import rearrange
 import torch
 import numpy as np
 from typing import Union
-from .affine_transform import AlignRestore
+from .affine_transform import AlignRestore, LaplacianSmooth
 from .face_detector import FaceDetector
 
 
@@ -38,7 +38,7 @@ class ImageProcessor:
             (resolution, resolution), interpolation=transforms.InterpolationMode.BICUBIC, antialias=True
         )
         self.normalize = transforms.Normalize([0.5], [0.5], inplace=True)
-
+        self.smoother = LaplacianSmooth()
         self.restorer = AlignRestore(resolution=resolution, device=device)
 
         if mask_image is None:
@@ -55,14 +55,19 @@ class ImageProcessor:
         if self.face_detector is None:
             raise NotImplementedError("Using the CPU for face detection is not supported")
         bbox, landmark_2d_106 = self.face_detector(image)
+        
         if bbox is None:
             raise RuntimeError("Face not detected")
+        smooth_landmark_2d_106 = self.smoother.smooth(landmark_2d_106)
+        
+        pt_left_eye = np.mean(smooth_landmark_2d_106[[43, 48, 49, 51, 50]], axis=0)  # left eyebrow center
+        pt_right_eye = np.mean(smooth_landmark_2d_106[101:106], axis=0)  # right eyebrow center
+        pt_nose = np.mean(smooth_landmark_2d_106[[74, 77, 83, 86]], axis=0)  # nose center
 
-        pt_left_eye = np.mean(landmark_2d_106[[43, 48, 49, 51, 50]], axis=0)  # left eyebrow center
-        pt_right_eye = np.mean(landmark_2d_106[101:106], axis=0)  # right eyebrow center
-        pt_nose = np.mean(landmark_2d_106[[74, 77, 83, 86]], axis=0)  # nose center
-
-        landmarks3 = np.round([pt_left_eye, pt_right_eye, pt_nose])
+        landmarks3 = np.zeros((3, 2))
+        landmarks3[0] = pt_left_eye
+        landmarks3[1] = pt_right_eye
+        landmarks3[2] = pt_nose
 
         face, affine_matrix = self.restorer.align_warp_face(image.copy(), landmarks3=landmarks3, smooth=True)
         box = [0, 0, face.shape[1], face.shape[0]]  # x1, y1, x2, y2

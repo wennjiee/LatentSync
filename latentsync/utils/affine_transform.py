@@ -8,7 +8,7 @@ import kornia
 
 
 class AlignRestore(object):
-    def __init__(self, align_points=3, resolution=256, device="cpu", dtype=torch.float16):
+    def __init__(self, align_points=3, resolution=256, device="cpu", dtype=torch.float32):
         if align_points == 3:
             self.upscale_factor = 1
             ratio = resolution / 256 * 2.8
@@ -91,9 +91,14 @@ class AlignRestore(object):
         inv_soft_mask_3d = inv_soft_mask.expand_as(inv_face)
         img_back = inv_soft_mask_3d * pasted_face + (1 - inv_soft_mask_3d) * input_img
 
-        img_back = rearrange(img_back, "c h w -> h w c").contiguous().to(dtype=torch.uint8)
-        img_back = img_back.cpu().numpy()
-        return img_back
+        img_back = rearrange(img_back, "c h w -> h w c").contiguous().to(dtype=torch.uint16)
+        
+        upsample_img = img_back.cpu().numpy()
+        if np.max(upsample_img) > 256:
+            upsample_img = upsample_img.astype(np.uint16)
+        else:
+            upsample_img = upsample_img.astype(np.uint8)
+        return upsample_img
 
     def transformation_from_points(self, points1: torch.Tensor, points0: torch.Tensor, smooth=True, p_bias=None):
         if isinstance(points0, np.ndarray):
@@ -143,3 +148,32 @@ class AlignRestore(object):
             M[:, 2] = M[:, 2] + bias
 
         return M.cpu().numpy(), p_bias
+
+
+class LaplacianSmooth:
+    def __init__(self, smoothAlpha=0.3):
+        self.smoothAlpha = smoothAlpha
+        self.pts_last = None
+
+    def smooth(self, pts_cur):
+        if self.pts_last is None:
+            self.pts_last = pts_cur.copy()
+            return pts_cur.copy()
+        x1 = min(pts_cur[:, 0])
+        x2 = max(pts_cur[:, 0])
+        y1 = min(pts_cur[:, 1])
+        y2 = max(pts_cur[:, 1])
+        width = x2 - x1
+        pts_update = []
+        for i in range(len(pts_cur)):
+            x_new, y_new = pts_cur[i]
+            x_old, y_old = self.pts_last[i]
+            tmp = (x_new - x_old) ** 2 + (y_new - y_old) ** 2
+            w = np.exp(-tmp / (width * self.smoothAlpha))
+            x = x_old * w + x_new * (1 - w)
+            y = y_old * w + y_new * (1 - w)
+            pts_update.append([x, y])
+        pts_update = np.array(pts_update)
+        self.pts_last = pts_update.copy()
+
+        return pts_update
