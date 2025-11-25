@@ -16,6 +16,7 @@ from packaging import version
 
 from diffusers.configuration_utils import FrozenDict
 from diffusers.models import AutoencoderKL
+from diffusers.models.attention_processor import FusedAttnProcessor2_0
 from diffusers.pipelines import DiffusionPipeline
 from diffusers.schedulers import (
     DDIMScheduler,
@@ -127,6 +128,36 @@ class LipsyncPipeline(DiffusionPipeline):
 
     def disable_vae_slicing(self):
         self.vae.disable_slicing()
+    
+    def enable_vae_tiling(self):
+        r"""
+        Enable tiled VAE decoding. When this option is enabled, the VAE will split the input tensor into tiles to
+        compute decoding and encoding in several steps. This is useful for saving a large amount of memory and to allow
+        processing larger images.
+        """
+        self.vae.enable_tiling()
+
+    def disable_vae_tiling(self):
+        r"""
+        Disable tiled VAE decoding. If `enable_vae_tiling` was previously enabled, this method will go back to
+        computing decoding in one step.
+        """
+        self.vae.disable_tiling()
+    
+    def enable_vae_qkv_fusion(self):
+        self.fusing_vae = False
+        if not isinstance(self.vae, AutoencoderKL):
+            raise ValueError("`fuse_qkv_projections()` is only supported for the VAE of type `AutoencoderKL`.")
+        self.fusing_vae = True
+        self.vae.fuse_qkv_projections()
+        self.vae.set_attn_processor(FusedAttnProcessor2_0())
+
+    def disable_vae_qkv_fusion(self):
+        if not self.fusing_vae:
+            logger.warning("The VAE was not initially fused for QKV projections. Doing nothing.")
+        else:
+            self.vae.unfuse_qkv_projections()
+            self.fusing_vae = False
 
     @property
     def _execution_device(self):
@@ -402,7 +433,8 @@ class LipsyncPipeline(DiffusionPipeline):
             → Output short video for current chunk_id
         → Concatenate all chunk_id video segments into the final output.
         """
-
+        self.enable_vae_slicing()
+        self.enable_vae_qkv_fusion()
         is_train = self.unet.training
         self.unet.eval()
 
