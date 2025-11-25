@@ -488,7 +488,39 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
         for key in keys_to_remove:
             del state_dict[key]
+        
+        # Handle position encoding size mismatch
+        # If checkpoint has different max_len, skip loading pos_encoder.pe parameters
+        pos_encoder_keys_to_remove = []
+        for key in state_dict:
+            if "pos_encoder.pe" in key:
+                checkpoint_pe = state_dict[key]
+                # Check if size matches current model
+                try:
+                    # Try to find corresponding parameter/buffer in model
+                    model_param = None
+                    
+                    for name, buffer in self.named_buffers():
+                        if name == key:
+                            model_param = buffer
+                            break
+                    
+                    if model_param is None:
+                        for name, param in self.named_parameters():
+                            if name == key:
+                                model_param = param
+                                break
+                    
+                    if model_param is not None and checkpoint_pe.shape != model_param.shape:
+                        # Mismatch, skip this parameter
+                        pos_encoder_keys_to_remove.append(key)
+                except:
+                    # If we can't find it, skip it
+                    pos_encoder_keys_to_remove.append(key)
 
+        for key in pos_encoder_keys_to_remove:
+            del state_dict[key]
+        
         return super().load_state_dict(state_dict=state_dict, strict=strict)
 
     @classmethod

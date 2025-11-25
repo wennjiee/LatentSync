@@ -10,7 +10,7 @@ data:
   val_audio_path: assets/demo1_audio.wav
   batch_size: 1 # 4
   num_workers: 12 # 12
-  num_frames: 16
+  num_frames: 32
   resolution: 256
   mask_image_path: latentsync/utils/mask.png
   audio_sample_rate: 16000
@@ -94,6 +94,6 @@ model:
       - Temporal_Self
       - Temporal_Self
     temporal_position_encoding: true
-    temporal_position_encoding_max_len: 24
+    temporal_position_encoding_max_len: 32
     temporal_attention_dim_div: 1
     zero_initialize: true
