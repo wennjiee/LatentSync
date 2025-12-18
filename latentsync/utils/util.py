@@ -124,24 +124,30 @@ def split_video_and_audio(workspace: str, video_path: str, audio_path: str, segm
     video_files = sorted(glob(os.path.abspath(os.path.join(segments_path, "chunk_*.mp4"))))
     
     # 2. Audio splitting
-    audio_files = []
+    res_video_files = []
+    res_audio_files = []
     print(f"[INFO] Extracting audio from {len(video_files)} segments...")
+    
     for video_file in video_files:
-        base_name = os.path.splitext(os.path.basename(video_file))[0]
-        wav_file = os.path.abspath(os.path.join(segments_path, f"{base_name}.wav"))
-        extract_cmd = [
-            "ffmpeg", "-y", "-i", video_file,
-            "-vn", "-loglevel", "warning",
-            "-threads", "8",
-            "-acodec", "pcm_s16le",
-            "-ar", "16000",
-            "-ac", "2",
-            wav_file
-        ]
-        subprocess.run(extract_cmd, check=True)
-        audio_files.append(wav_file)
+        if has_audio(video_path=video_file):
+            base_name = os.path.splitext(os.path.basename(video_file))[0]
+            wav_file = os.path.abspath(os.path.join(segments_path, f"{base_name}.wav"))
+            
+            extract_cmd = [
+                "ffmpeg", "-y", "-i", video_file,
+                "-vn", "-loglevel", "warning",
+                "-threads", "8",
+                "-acodec", "pcm_s16le",
+                "-ar", "16000",
+                "-ac", "2",
+                wav_file
+            ]
+            subprocess.run(extract_cmd, check=True)
+            res_video_files.append(video_file)
+            res_audio_files.append(wav_file)
     print(f"[INFO] Finish Extracting Audio")
-    return video_files, audio_files
+    
+    return res_video_files, res_audio_files
 
 
 def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str):
@@ -221,6 +227,20 @@ def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str
     
     print(f"Merging completed, File: {standard_video}")
     return standard_video, input_audio
+
+
+def has_audio(video_path: str) -> bool:
+    cmd = [
+        'ffprobe', '-v', 'error',
+        '-select_streams', 'a',
+        '-show_entries',
+        'stream=codec_type',
+        '-of', 'csv=p=0',
+        video_path
+    ]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True)
+    return bool(res.stdout.strip())
+
 
 def read_video_decord(video_path: str, max_frames: int):
     vr = VideoReader(video_path)
