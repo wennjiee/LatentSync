@@ -73,7 +73,7 @@ def read_video(video_path: str, change_fps=True, use_decord=True, max_frames=-1)
         #     scale_option = "-vf scale=-1:1080"
         # 考虑显卡加速
         command = (
-            f"ffmpeg -y -nostdin -i {video_path} {scale_option} -r 25 -crf 18 -threads 8 {os.path.join(temp_dir, 'video.mp4')}"
+            f"ffmpeg -y -nostdin -i {video_path} {scale_option} -r 25 -crf 13 -threads 8 {os.path.join(temp_dir, 'video.mp4')}"
         )
         print(f'cmd = {command}')
         subprocess.run(command, shell=True)
@@ -109,7 +109,7 @@ def split_video_and_audio(workspace: str, video_path: str, audio_path: str, segm
         "-nostdin", "-i", video_path,
         *scale_option, "-r", "25",
         "-c:v", "libx264",
-        "-crf", "18",
+        "-crf", "13",
         "-preset", "fast",
         "-threads", "8",
         "-force_key_frames", f"expr:gte(t,n_forced*{segment_seconds})",
@@ -169,7 +169,7 @@ def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str
             'ffmpeg', '-y', '-i', src,
             '-vf', 'reverse',
             '-an', "-threads", "8",
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '13',
             dst
         ]
         subprocess.run(cmd, check=True)
@@ -178,7 +178,7 @@ def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str
         cmd = [
             'ffmpeg', '-y', '-i', src,
             '-an', "-threads", "8",
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '13',
             dst
         ]
         subprocess.run(cmd, check=True)
@@ -219,7 +219,7 @@ def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str
         "-threads", "8",
         '-map', '0:v:0',
         '-map', '1:a:0',
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '13',
         '-c:a', 'aac',
         '-shortest',
         standard_video

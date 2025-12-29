@@ -645,7 +645,7 @@ class LipsyncPipeline(DiffusionPipeline):
                 f"ffmpeg -y -nostdin "
                 f"-i {concat_video_out} "
                 f"-i {os.path.join(temp_dir, 'audio.wav')} "
-                f"-c:v libx264 -crf 18 "
+                f"-c:v libx264 -crf 13 "
                 f"-c:a aac -b:a 192k "
                 f"{output_chunks}"
             )
