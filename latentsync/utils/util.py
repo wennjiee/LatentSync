@@ -110,7 +110,7 @@ def split_video_and_audio(workspace: str, video_path: str, audio_path: str, segm
         *scale_option, "-r", "25",
         "-c:v", "libx264",
         "-crf", "13",
-        "-preset", "fast",
+        "-preset", "veryfast",
         "-threads", "8",
         "-force_key_frames", f"expr:gte(t,n_forced*{segment_seconds})",
         "-c:a", "copy",
@@ -165,20 +165,61 @@ def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str
         return float(result.stdout)
 
     def create_reversed_video(src, dst):
-        cmd = [
-            'ffmpeg', '-y', '-i', src,
-            '-vf', 'reverse',
-            '-an', "-threads", "8",
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '13',
+        seg_dir = os.path.join(workspace, 'rev_segments')
+        os.makedirs(seg_dir, exist_ok=True)
+
+        segment_time = 40
+
+        # 1. Split video (Stream Copy)
+        subprocess.run([
+            'ffmpeg', '-y', "-loglevel", "error", '-i', src,
+            '-map', '0:v', '-an',
+            '-c', 'copy',
+            '-f', 'segment',
+            '-segment_time', str(segment_time),
+            os.path.join(seg_dir, '%05d.mp4')
+        ], check=True)
+
+        segments = sorted(
+            os.path.join(seg_dir, f)
+            for f in os.listdir(seg_dir)
+            if f.endswith('.mp4')
+        )
+
+        # 2. Reverse segments
+        reversed_segments = []
+        for seg in segments:
+            rev_seg = seg.replace('.mp4', '_rev.mp4')
+            subprocess.run([
+                'ffmpeg', '-y', "-loglevel", "error",'-i', seg,
+                '-vf', 'reverse',
+                '-an',
+                '-c:v', 'libx264',
+                '-preset', 'veryfast',
+                '-crf', '13',
+                rev_seg
+            ], check=True)
+            reversed_segments.append(rev_seg)
+
+        # 3. Concat reversed segments
+        concat_list = os.path.join(seg_dir, 'rev_concat.txt')
+        with open(concat_list, 'w') as f:
+            for p in reversed(reversed_segments):
+                f.write(f"file '{os.path.abspath(p)}'\n")
+
+        subprocess.run([
+            'ffmpeg', '-y',
+            '-f', 'concat', '-safe', '0',
+            '-i', concat_list,
+            '-c', 'copy',
             dst
-        ]
-        subprocess.run(cmd, check=True)
+        ], check=True)
 
     def create_forward_video(src, dst):
         cmd = [
             'ffmpeg', '-y', '-i', src,
             '-an', "-threads", "8",
-            '-c:v', 'libx264', '-preset', 'fast', '-crf', '13',
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '13',
             dst
         ]
         subprocess.run(cmd, check=True)
@@ -219,7 +260,7 @@ def loop_video_to_match_audio(workspace: str, input_video: str, input_audio: str
         "-threads", "8",
         '-map', '0:v:0',
         '-map', '1:a:0',
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '13',
+        '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '13',
         '-c:a', 'aac',
         '-shortest',
         standard_video
